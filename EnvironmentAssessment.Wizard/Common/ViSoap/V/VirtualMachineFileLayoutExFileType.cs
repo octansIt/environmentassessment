@@ -1,0 +1,29 @@
+namespace EnvironmentAssessment.Common.VISoap
+{
+    public enum VirtualMachineFileLayoutExFileType
+	{
+		config,
+		extendedConfig,
+		diskDescriptor,
+		diskExtent,
+		digestDescriptor,
+		digestExtent,
+		diskReplicationState,
+		log,
+		stat,
+		namespaceData,
+		nvram,
+		snapshotData,
+		snapshotMemory,
+		snapshotList,
+		snapshotManifestList,
+		suspend,
+		suspendMemory,
+		swap,
+		uwswap,
+		core,
+		screenshot,
+		ftMetadata,
+		guestCustomization
+	}
+}

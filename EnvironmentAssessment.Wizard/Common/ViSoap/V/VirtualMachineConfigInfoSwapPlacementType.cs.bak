@@ -1,0 +1,10 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public enum VirtualMachineConfigInfoSwapPlacementType
+	{
+		inherit,
+		vmDirectory,
+		hostLocal
+	}
+}

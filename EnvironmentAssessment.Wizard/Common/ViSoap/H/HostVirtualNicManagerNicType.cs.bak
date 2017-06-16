@@ -1,0 +1,12 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public enum HostVirtualNicManagerNicType
+	{
+		vmotion,
+		faultToleranceLogging,
+		vSphereReplication,
+		management,
+		vsan
+	}
+}

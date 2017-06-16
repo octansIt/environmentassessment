@@ -1,0 +1,19 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public class VirtualCdromPassthroughBackingInfo : VirtualDeviceDeviceBackingInfo
+	{
+		protected bool _exclusive;
+		public bool Exclusive
+		{
+			get
+			{
+				return this._exclusive;
+			}
+			set
+			{
+				this._exclusive = value;
+			}
+		}
+	}
+}

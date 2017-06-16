@@ -1,0 +1,10 @@
+﻿<Controls:Wizard
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:Controls="clr-namespace:EnvironmentAssessment.Controls"
+        xmlns:local="clr-namespace:EnvironmentAssessment" x:Class="EnvironmentAssessment.AppWizard"
+        Title="Environment Assessment" Height="526" Width="746"
+        Icon="ea.ico" Style="{DynamicResource WizardStyle}" WindowStartupLocation="CenterScreen" SnapsToDevicePixels="True" ResizeMode="CanMinimize" Closing="Wizard_Closing" Closed="Wizard_Closed">
+    <Grid Name="MainGrid" Margin="-6">
+    </Grid>
+</Controls:Wizard>

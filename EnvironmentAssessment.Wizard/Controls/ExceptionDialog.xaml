@@ -1,0 +1,31 @@
+﻿<Controls:Dialog x:Class="EnvironmentAssessment.Controls.ExceptionDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:Controls="clr-namespace:EnvironmentAssessment.Controls"
+        Style="{DynamicResource DialogStyle}" Height="175" Width="500" ResizeMode="NoResize" WindowStartupLocation="CenterOwner" SnapsToDevicePixels="True" Icon="/EnvironmentAssessment;component/ea.ico">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0" VerticalAlignment="Top">
+                <Label Name="lblException">
+                    <TextBlock Name="tbkException" FontSize="14" TextWrapping="Wrap" Margin="18,22,18,20" FontFamily="Segoe UI"></TextBlock>
+                </Label>
+        </Grid>
+        <Border Name="bdDetails" Grid.Row="1" Background="{DynamicResource LightLightGray}" BorderBrush="{DynamicResource LightGray}" BorderThickness="0"  Margin="-6,8,-6,-6" Visibility="Collapsed">
+            <TextBox Name="tbkDetails" Background="{DynamicResource LightLightGray}" Foreground="{DynamicResource DarkGray}" FontFamily="Consolas" Padding="18,14,18,53" ScrollViewer.VerticalScrollBarVisibility="Visible" IsReadOnly="True" Style="{DynamicResource WizardExceptionBoxStyle}"/>
+        </Border>
+        <Border Grid.Row="2" BorderBrush="{DynamicResource LightGray}" DockPanel.Dock="Bottom" Height="0" VerticalAlignment="Bottom" Margin="8,0,8,0">
+            <!-- BorderThickness="0,1,0,0" -->
+            <Grid Name="btmGrid" Margin="-8,-44,-8,6" Height="32">
+                <Label Name="lblMoreInfo" HorizontalAlignment="Left" VerticalAlignment="Top" MouseDown="lblMoreInfo_MouseDown">
+                    <TextBlock Foreground="{DynamicResource MediumAccent}" FontSize="11" TextAlignment="Left" Width="90"  Margin="10,6,12,0">View Logs</TextBlock>
+                </Label>
+                <Button Name="btnClose" FontSize="14" Content="_Close" HorizontalAlignment="Right" Width="65" Style="{StaticResource WizardOKCancelButtonStyle}" Margin="0,0,16,0" Click="btnClose_Click" IsCancel="True"/>
+                <Button Name="btnDetails" FontSize="14" Content="_Details" HorizontalAlignment="Right" Width="75"  Margin="0,0,95,0" Style="{StaticResource WizardOKCancelButtonStyle}" Click="btnDetails_Click" IsDefault="True"/>
+            </Grid>
+        </Border>
+    </Grid>
+</Controls:Dialog>

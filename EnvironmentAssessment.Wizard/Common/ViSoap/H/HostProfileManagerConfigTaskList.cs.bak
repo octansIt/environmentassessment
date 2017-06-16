@@ -1,0 +1,31 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public class HostProfileManagerConfigTaskList : DynamicData
+	{
+		protected HostConfigSpec _configSpec;
+		protected LocalizableMessage[] _taskDescription;
+		public HostConfigSpec ConfigSpec
+		{
+			get
+			{
+				return this._configSpec;
+			}
+			set
+			{
+				this._configSpec = value;
+			}
+		}
+		public LocalizableMessage[] TaskDescription
+		{
+			get
+			{
+				return this._taskDescription;
+			}
+			set
+			{
+				this._taskDescription = value;
+			}
+		}
+	}
+}

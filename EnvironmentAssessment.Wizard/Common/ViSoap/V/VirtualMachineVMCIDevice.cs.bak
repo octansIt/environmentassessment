@@ -1,0 +1,31 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public class VirtualMachineVMCIDevice : VirtualDevice
+	{
+		protected long? _id;
+		protected bool? _allowUnrestrictedCommunication;
+		public long? Id
+		{
+			get
+			{
+				return this._id;
+			}
+			set
+			{
+				this._id = value;
+			}
+		}
+		public bool? AllowUnrestrictedCommunication
+		{
+			get
+			{
+				return this._allowUnrestrictedCommunication;
+			}
+			set
+			{
+				this._allowUnrestrictedCommunication = value;
+			}
+		}
+	}
+}

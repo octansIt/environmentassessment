@@ -1,0 +1,31 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public class ClusterDasAdvancedRuntimeInfo : DynamicData
+	{
+		protected ClusterDasHostInfo _dasHostInfo;
+		protected DasHeartbeatDatastoreInfo[] _heartbeatDatastoreInfo;
+		public ClusterDasHostInfo DasHostInfo
+		{
+			get
+			{
+				return this._dasHostInfo;
+			}
+			set
+			{
+				this._dasHostInfo = value;
+			}
+		}
+		public DasHeartbeatDatastoreInfo[] HeartbeatDatastoreInfo
+		{
+			get
+			{
+				return this._heartbeatDatastoreInfo;
+			}
+			set
+			{
+				this._heartbeatDatastoreInfo = value;
+			}
+		}
+	}
+}

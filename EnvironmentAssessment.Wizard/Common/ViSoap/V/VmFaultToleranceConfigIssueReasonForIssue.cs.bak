@@ -1,0 +1,29 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public enum VmFaultToleranceConfigIssueReasonForIssue
+	{
+		haNotEnabled,
+		moreThanOneSecondary,
+		recordReplayNotSupported,
+		replayNotSupported,
+		templateVm,
+		multipleVCPU,
+		hostInactive,
+		ftUnsupportedHardware,
+		ftUnsupportedProduct,
+		missingVMotionNic,
+		missingFTLoggingNic,
+		thinDisk,
+		verifySSLCertificateFlagNotSet,
+		hasSnapshots,
+		noConfig,
+		ftSecondaryVm,
+		hasLocalDisk,
+		esxAgentVm,
+		video3dEnabled,
+		hasUnsupportedDisk,
+		hasNestedHVConfiguration,
+		hasVFlashConfiguration
+	}
+}

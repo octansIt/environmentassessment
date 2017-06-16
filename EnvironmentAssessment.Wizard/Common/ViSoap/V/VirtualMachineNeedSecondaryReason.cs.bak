@@ -1,0 +1,13 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public enum VirtualMachineNeedSecondaryReason
+	{
+		initializing,
+		divergence,
+		lostConnection,
+		partialHardwareFailure,
+		userAction,
+		other
+	}
+}

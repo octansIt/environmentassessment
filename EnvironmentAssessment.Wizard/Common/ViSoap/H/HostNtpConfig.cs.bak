@@ -1,0 +1,19 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public class HostNtpConfig : DynamicData
+	{
+		protected string[] _server;
+		public string[] Server
+		{
+			get
+			{
+				return this._server;
+			}
+			set
+			{
+				this._server = value;
+			}
+		}
+	}
+}

@@ -1,0 +1,26 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public enum VirtualMachineFileLayoutExFileType
+	{
+		config,
+		extendedConfig,
+		diskDescriptor,
+		diskExtent,
+		digestDescriptor,
+		digestExtent,
+		diskReplicationState,
+		log,
+		stat,
+		namespaceData,
+		nvram,
+		snapshotData,
+		snapshotList,
+		snapshotManifestList,
+		suspend,
+		swap,
+		uwswap,
+		core,
+		screenshot
+	}
+}

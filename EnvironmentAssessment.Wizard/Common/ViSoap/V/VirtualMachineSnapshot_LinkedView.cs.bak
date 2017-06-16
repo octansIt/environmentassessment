@@ -1,0 +1,15 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public class VirtualMachineSnapshot_LinkedView
+	{
+		protected VirtualMachineSnapshot[] _childSnapshot;
+		public VirtualMachineSnapshot[] ChildSnapshot
+		{
+			get
+			{
+				return this._childSnapshot;
+			}
+		}
+	}
+}

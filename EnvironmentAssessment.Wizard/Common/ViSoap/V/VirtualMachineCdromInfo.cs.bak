@@ -1,0 +1,7 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public class VirtualMachineCdromInfo : VirtualMachineTargetInfo
+	{
+	}
+}

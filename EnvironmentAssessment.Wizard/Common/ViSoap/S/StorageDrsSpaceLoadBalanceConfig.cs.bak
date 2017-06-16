@@ -1,0 +1,31 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public class StorageDrsSpaceLoadBalanceConfig : DynamicData
+	{
+		protected int? _spaceUtilizationThreshold;
+		protected int? _minSpaceUtilizationDifference;
+		public int? SpaceUtilizationThreshold
+		{
+			get
+			{
+				return this._spaceUtilizationThreshold;
+			}
+			set
+			{
+				this._spaceUtilizationThreshold = value;
+			}
+		}
+		public int? MinSpaceUtilizationDifference
+		{
+			get
+			{
+				return this._minSpaceUtilizationDifference;
+			}
+			set
+			{
+				this._minSpaceUtilizationDifference = value;
+			}
+		}
+	}
+}

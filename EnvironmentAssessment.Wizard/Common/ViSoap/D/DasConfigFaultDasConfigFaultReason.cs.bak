@@ -1,0 +1,14 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public enum DasConfigFaultDasConfigFaultReason
+	{
+		HostNetworkMisconfiguration,
+		HostMisconfiguration,
+		InsufficientPrivileges,
+		NoPrimaryAgentAvailable,
+		Other,
+		NoDatastoresConfigured,
+		VSanNotSupportedOnHost
+	}
+}

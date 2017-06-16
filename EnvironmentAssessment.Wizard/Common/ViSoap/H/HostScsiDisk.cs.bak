@@ -1,0 +1,43 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public class HostScsiDisk : ScsiLun
+	{
+		protected HostDiskDimensionsLba _capacity;
+		protected string _devicePath;
+		protected bool? _ssd;
+		public HostDiskDimensionsLba Capacity
+		{
+			get
+			{
+				return this._capacity;
+			}
+			set
+			{
+				this._capacity = value;
+			}
+		}
+		public string DevicePath
+		{
+			get
+			{
+				return this._devicePath;
+			}
+			set
+			{
+				this._devicePath = value;
+			}
+		}
+		public bool? Ssd
+		{
+			get
+			{
+				return this._ssd;
+			}
+			set
+			{
+				this._ssd = value;
+			}
+		}
+	}
+}

@@ -1,0 +1,19 @@
+using System;
+namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
+{
+	public class VirtualMachineVMCIDeviceOption : VirtualDeviceOption
+	{
+		protected BoolOption _allowUnrestrictedCommunication;
+		public BoolOption AllowUnrestrictedCommunication
+		{
+			get
+			{
+				return this._allowUnrestrictedCommunication;
+			}
+			set
+			{
+				this._allowUnrestrictedCommunication = value;
+			}
+		}
+	}
+}
