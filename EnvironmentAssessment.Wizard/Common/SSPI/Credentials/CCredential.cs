@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI.Credentials
+namespace EnvironmentAssessment.Common.Sspi.Credentials
 {
     /// <summary>
     /// Provides access to the pre-existing credentials of a security principle.

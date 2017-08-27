@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI
+namespace EnvironmentAssessment.Common.Sspi
 {
     /// <summary>
     /// Represents a Windows API Timestamp structure, which stores time in units of 100 nanosecond 

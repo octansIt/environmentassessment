@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace EnvironmentAssessment.Common.VBRAPI
+namespace EnvironmentAssessment.Common.VbrApi
 {
     class Job
     {
@@ -11,7 +11,7 @@ namespace EnvironmentAssessment.Common.VBRAPI
         {
             private int _type;
 
-            private static string[] JobTypes = { "Backup Job", "Backup Copy Job", "Replica Job", "File To Tape Job", "Backup To Tape Job", "File Copy Job", "VM Copy Job" };
+            private static string[] Values = { "Backup Job", "Backup Copy Job", "Replica Job", "File To Tape Job", "Backup To Tape Job", "File Copy Job", "VM Copy Job" };
 
             public const int BackupJob = 0;
             public const int BackupCopyJob = 1;
@@ -23,7 +23,7 @@ namespace EnvironmentAssessment.Common.VBRAPI
             
             public CJobType(string s = "")
             {
-                _type = Array.IndexOf(JobTypes, s);
+                _type = Array.IndexOf(Values, s);
             }
             public CJobType(int t = -1)
             {
@@ -32,12 +32,12 @@ namespace EnvironmentAssessment.Common.VBRAPI
 
             public void Dispose()
             {
-                JobTypes = null;
+                Values = null;
             }
 
             public override string ToString()
             {
-                return JobTypes[_type];
+                return Values[_type];
             }
 
             public static implicit operator int(CJobType x)

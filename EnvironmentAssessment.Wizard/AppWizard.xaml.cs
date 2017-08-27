@@ -15,13 +15,14 @@ namespace EnvironmentAssessment
     /// </summary>
     /// 
 
+    using System.Threading;
     using Common.Inventory;
     using Common;
-    using System.Threading;
-    using EnvironmentAssessment.Collector;
-    using Reporter;
+    using Collector;
+    using Database;
     using System.Collections.ObjectModel;
     using System.Diagnostics;
+    using System.Windows.Shell;
 
     public partial class AppWizard : Controls.Wizard
     {
@@ -40,8 +41,9 @@ namespace EnvironmentAssessment
         public ObservableCollection<CTaskInfo> ProgressInfo;
         object _ProgressInfoLock = new object();
 
+        CDatabaseManager DatabaseManager;
         CCollectionManager CollectionManager;
-        CReportManager ReportManager;
+        //CReportManager ReportManager;
 
         public IntPtr Handle
         {
@@ -51,10 +53,12 @@ namespace EnvironmentAssessment
         public AppWizard()
         {
             InitializeComponent();
-
+            
             // kill previous instances of Environment Assessment Web Service that may be running
             CWebServiceManager.Kill();
 
+            // create progress related objects
+            base.TaskbarItemInfo = new TaskbarItemInfo();
             ProgressInfo = new ObservableCollection<CTaskInfo> { };
             CFunctions.EnableCollectionSynchronization(ProgressInfo, _ProgressInfoLock);
 
@@ -76,22 +80,18 @@ namespace EnvironmentAssessment
             cntMain.Child = mainPanel; 
             
             // add pages
-            List<Control> PageControls = new List<Control>();
             List<string> ButtonText = new List<string>() { "< _Previous", "_Next >", "_Cancel" };
 
             pnlWelcome = new Controls.WelcomePanel();
             pnlWelcome.tbkTitle.Text = "Analyze your server environment";
-            pnlWelcome.tbkSubTitle.Text = "Collects data from vSphere.";
+            pnlWelcome.tbkSubTitle.Text = "Collects data from vSphere and Hyper-V.";
             pnlWelcome.tbkTerms.Text = "This program is provided as-is with no implied warranties whatsoever as to its functionality, operability, use or fitness for any purpose. We disclaim any liability regarding the use of this program, even if previously advised of such. By using this sofware you agree to these terms.";
-            PageControls.Add(pnlWelcome);
-            AppWizard.Pages.Add(new Page(pnlWelcome.tbkTitle.Text, pnlWelcome.tbkSubTitle.Text, PageControls, ButtonText));
-            PageControls.Clear();
+            Pages.Add(new Page(pnlWelcome.tbkTitle.Text, pnlWelcome.tbkSubTitle.Text, new List<Control> { pnlWelcome }, ButtonText));
 
             pnlServers = new Controls.ServerPanel();
-            pnlServers.lvServers.SetBinding(ListView.ItemsSourceProperty, new Binding() { Path = new PropertyPath("CService"), NotifyOnTargetUpdated = true });
+            pnlServers.lvServers.SetBinding(ItemsControl.ItemsSourceProperty, new Binding() { Path = new PropertyPath("CService"), NotifyOnTargetUpdated = true });
             pnlServers.lvServers.ItemsSource = DiscoveredServers;
-            //[ or pnlServers.lvServers.SelectionChanged link to next and previous buttons]
-            PageControls.Add(pnlServers);
+            //[ or pnlServers.lvServers.SelectionChanged link to next and previous buttons];
 
             pnlServers.lgvServer.Columns.Add(new GridViewColumn { Header = "Server", DisplayMemberBinding = new Binding("Name"), Width = 140 });
             pnlServers.lgvServer.Columns.Add(new GridViewColumn { Header = "Type", DisplayMemberBinding = new Binding("Type"), Width = 120 });
@@ -101,17 +101,14 @@ namespace EnvironmentAssessment
             CWorker OnServiceDiscoverWorker = new CWorker();
             OnServiceDiscoverWorker.DoWork += OnServiceDiscoverWorker_DoWork;
             OnServiceDiscoverWorker.RunWorkerCompleted += OnServiceDiscoverWorker_RunWorkerCompleted;
-            AppWizard.Pages.Add(new Page("Server Connections", "Configure the credentials to access vSphere.", PageControls, ButtonText,  OnServicePageValidateHandler, OnServiceDiscoverWorker));
-            PageControls.Clear();
+            Pages.Add(new Page("Server Connections", "Configure the credentials to \r\naccess vSphere and Hyper-V.", new List<Control> { pnlServers }, ButtonText,  OnServicePageValidateHandler, OnServiceDiscoverWorker));
 
             pnlProgress = new Controls.ProgressPanel();
             //pnlProgress.lblProgress.Content = "Collecting Data...";
-            pnlProgress.lvProgress.SetBinding(ListView.ItemsSourceProperty, new Binding() { Path = new PropertyPath("CTaskStatus"), NotifyOnTargetUpdated = true });
+            pnlProgress.lvProgress.SetBinding(ItemsControl.ItemsSourceProperty, new Binding() { Path = new PropertyPath("CTaskStatus"), NotifyOnTargetUpdated = true });
             pnlProgress.lvProgress.ItemsSource = ProgressInfo;
             pnlProgress.lgvProgress.Columns.Add(new GridViewColumn { Header = "Action", CellTemplate = (DataTemplate)FindResource("ProgressActionTemplate"), Width = 385 }); //DisplayMemberBinding = new Binding("Details")
             pnlProgress.lgvProgress.Columns.Add(new GridViewColumn { Header = "Duration", DisplayMemberBinding = new Binding("Duration"), Width = 100});
-
-            PageControls.Add(pnlProgress);
             
             CWorker OnDataCollectWorker = new CWorker();
             OnDataCollectWorker.WorkerReportsProgress = true;
@@ -119,7 +116,7 @@ namespace EnvironmentAssessment
             OnDataCollectWorker.ProgressChanged += OnDataCollectWorker_ProgressChanged;
             OnDataCollectWorker.RunWorkerCompleted += OnDataCollectWorker_RunWorkerCompleted;
             pnlProgress.pbProgress.Value = 10;
-            AppWizard.Pages.Add(new Page("Data Collection", "Collecting data from vSphere.", PageControls, ButtonText, null, OnDataCollectWorker));
+            Pages.Add(new Page("Data Collection", "Collecting data from \r\nvSphere and Hyper-V.", new List<Control> { pnlProgress }, ButtonText, null, OnDataCollectWorker));
 
             MainGrid.Children.Add(cntTop);
             MainGrid.Children.Add(cntNav);
@@ -136,9 +133,9 @@ namespace EnvironmentAssessment
             topPanel.Children.Add(tbkSubTitle);
 
             int btnHeight = 30, btnWidth = 82;
-            btnPrevious = new Button() { Content = ButtonText[0], Height = btnHeight, Width = btnWidth, Margin = new Thickness(460, 0, 8, 0), HorizontalAlignment = HorizontalAlignment.Right, FontSize = 14, ToolTip = "Go to previous page", Style = this.FindResource("WizardNextPreviousButtonStyle") as Style };
-            btnNext = new Button() { Content = ButtonText[1], Height = btnHeight, Width = btnWidth, HorizontalAlignment = HorizontalAlignment.Right, FontSize = 14, Style = this.FindResource("WizardNextPreviousButtonStyle") as Style, ToolTip = "Go to next page" };
-            btnCancelFinish = new Button() { Content = ButtonText[2], Height = btnHeight, Width = btnWidth, HorizontalAlignment = HorizontalAlignment.Right, FontSize = 14, Style = this.FindResource("WizardOKCancelButtonStyle") as Style, IsCancel = true, ToolTip = "Close wizard" };
+            btnPrevious = new Button() { Content = ButtonText[0], Height = btnHeight, Width = btnWidth, Margin = new Thickness(460, 0, 8, 0), HorizontalAlignment = HorizontalAlignment.Right, FontSize = 14, ToolTip = "Go to previous page", Style = FindResource("WizardNextPreviousButtonStyle") as Style };
+            btnNext = new Button() { Content = ButtonText[1], Height = btnHeight, Width = btnWidth, HorizontalAlignment = HorizontalAlignment.Right, FontSize = 14, Style = FindResource("WizardNextPreviousButtonStyle") as Style, ToolTip = "Go to next page" };
+            btnCancelFinish = new Button() { Content = ButtonText[2], Height = btnHeight, Width = btnWidth, HorizontalAlignment = HorizontalAlignment.Right, FontSize = 14, Style = FindResource("WizardOKCancelButtonStyle") as Style, IsCancel = true, ToolTip = "Close wizard" };
             btnNext.Click += btnNext_Click;
             btnPrevious.Click += btnPrevious_Click;
             btnCancelFinish.Click += btnCancelFinish_Click;
@@ -202,45 +199,63 @@ namespace EnvironmentAssessment
             btnCancelFinish.Content = "_Finish";
             btnNext.Style = (Style)FindResource("WizardOKCancelButtonStyle");
             btnPrevious.Style = (Style)FindResource("WizardOKCancelButtonStyle");
+            btnCancelFinish.Style = (Style)FindResource("WizardNextPreviousButtonStyle");
             UpdateControls();
+        }
+
+        private int ResetProgressInfo()
+        {
+            lock (_ProgressInfoLock)
+            {
+                if (ProgressInfo != null) { ProgressInfo.Clear(); }
+            }
+            return 0;
+        }
+
+        private void UpdateProgressInfo(List<CTaskInfo> SessionInfo)
+        {
+            // update progress using state information from last (and empty taskinfo object)
+            string state = SessionInfo.Last<CTaskInfo>().Details;
+            if (state.Length > 0) { pnlProgress.lblProgress.Content = state; }
+
+            for (int i = 0; i < SessionInfo.Count - 1; i++)
+            {
+                if (SessionInfo[i].StartTime != null)
+                {
+                    lock (_ProgressInfoLock)
+                    {
+                        if (!ProgressInfo.Contains(SessionInfo[i]))
+                        {
+                            ProgressInfo.Add(SessionInfo[i]);
+                        }
+                    }
+                }
+            }
         }
 
         void OnDataCollectWorker_ProgressChanged(object sender, ProgressChangedEventArgs e)
         {
             int p = e.ProgressPercentage;
-            if (p == -1) {
-                lock(_ProgressInfoLock) {
-                    if (ProgressInfo != null) { ProgressInfo.Clear(); }
-                }
-                p = 0;
-            }
+
+            // reset progress information
+            if (p == -1) { p = ResetProgressInfo(); base.TaskbarItemInfo.ProgressState = TaskbarItemProgressState.None; }
             
+            // start progress counters if not done so already
             if (!pnlProgress.Running) { pnlProgress.Activate(); }
+
             if (e.UserState != null) {
                 List<CTaskInfo> SessionInfo = (List<CTaskInfo>)e.UserState;
                 if (SessionInfo.Count > 0)
                 {
-
-                    // update progress using state information from last (and empty taskinfo object)
-                    string state = SessionInfo.Last<CTaskInfo>().Details;
-                    if (state.Length > 0) { pnlProgress.lblProgress.Content = state; }
-
-                    for (int i = 0; i < SessionInfo.Count -1; i++)
-                    {
-                        if (SessionInfo[i].StartTime != null)
-                        {
-                            lock (_ProgressInfoLock)
-                            {
-                                if (!ProgressInfo.Contains(SessionInfo[i]))
-                                {
-                                    ProgressInfo.Add(SessionInfo[i]);
-                                }
-                            }
-                        }
-                    }
+                    UpdateProgressInfo(SessionInfo);
                 }
             }
+
+            if (base.TaskbarItemInfo.ProgressState != TaskbarItemProgressState.Normal) { base.TaskbarItemInfo.ProgressState = TaskbarItemProgressState.Normal; }
+            base.TaskbarItemInfo.ProgressValue = (double)p / 100;
+
             pnlProgress.SetProgress(p);
+
             if ((p) == 100) { pnlProgress.Complete = true; }
         }
 
@@ -252,9 +267,9 @@ namespace EnvironmentAssessment
 
                 // run collector to get host information
                 CollectionManager = new CCollectionManager();
-                List<CQuery.Types> queries = new List<CQuery.Types> { }; queries.Add(new CQuery.Types(CQuery.Types.Hosts));
+                List<CQuery.Types> queries = new List<CQuery.Types> { }; queries.Add(new CQuery.Types(CQuery.Types.Hosts)); queries.Add(new CQuery.Types(CQuery.Types.Components));
 
-                CollectionManager.RunStatisticsCollector(DiscoveredSites, DiscoveredServers, queries, new CCollectionSchedule(CCollectionSchedule.RunOnce));
+                CollectionManager.Collect(DiscoveredSites, DiscoveredServers, queries, new CCollectionSchedule(CCollectionSchedule.RunOnce));
 
                 // update progress panel
                 int p = 10;
@@ -266,21 +281,25 @@ namespace EnvironmentAssessment
                 OnDataCollectWorker_RemoveDuplicateServers();
 
                 // run collector to get vm and datastore information
-                queries = new List<CQuery.Types> { }; queries.Add(new CQuery.Types(CQuery.Types.VMs)); queries.Add(new CQuery.Types(CQuery.Types.Datastores));
-                CollectionManager.RunStatisticsCollector(DiscoveredSites, DiscoveredServers, queries, new CCollectionSchedule(CCollectionSchedule.RunOnce));
+                queries = new List<CQuery.Types> { }; queries.Add(new CQuery.Types(CQuery.Types.VMs)); queries.Add(new CQuery.Types(CQuery.Types.Datastores)); queries.Add(new CQuery.Types(CQuery.Types.Events));
+                CollectionManager.Collect(DiscoveredSites, DiscoveredServers, queries, new CCollectionSchedule(CCollectionSchedule.RunOnce));
 
                 // wait for collector to complete
                 p = OnDataCollectWorker_WaitForCollector(p, 70, "Collecting Data...", CollectionManager);
 
                 if (CollectionManager.SessionManager.ErrorCount != DiscoveredServers.Count) // run if we don't have as many errors as discovered servers
                 {
-                    ReportManager = new CReportManager();
+                    //ReportManager = new CReportManager();
 
                     // [tbd] create templated layout, maybe add scheduling
-                    ReportManager.RunReport(DiscoveredSites, DiscoveredServers);
+                    //ReportManager.RunReport(DiscoveredSites, DiscoveredServers);
+
+                    DatabaseManager = new CDatabaseManager();
+                    DatabaseManager.Export(DiscoveredSites, DiscoveredServers);
 
                     // wait for reporter to complete
-                    OnDataCollectWorker_WaitForReporter(p, 95, "Generating Report...", ReportManager);
+                    //OnDataCollectWorker_WaitForReporter(p, 95, "Generating Report...", ReportManager);
+                    OnDataCollectWorker_WaitForExport(p, 95, "Exporting Data...", DatabaseManager);
 
                     ProgressPanelUpdate(100, "Data Collection Complete.");
                 }
@@ -293,12 +312,12 @@ namespace EnvironmentAssessment
 
         }
 
-        private int OnDataCollectWorker_WaitForReporter(int p, int max, string title, CReportManager reportManager)
+        private int OnDataCollectWorker_WaitForExport(int p, int max, string title, CDatabaseManager databaseManager)
         {
-            ProgressPanelUpdate(p, title, ReportManager.SessionInfo);
+            ProgressPanelUpdate(p, title, DatabaseManager.SessionInfo);
 
             do { p = ProgressPanelUpdate(p, max); }
-            while (ReportManager != null && ReportManager.WriterManager != null && !ReportManager.WriterManager.Completed); // wait for report generation to complete
+            while (DatabaseManager != null && DatabaseManager.SessionManager != null && !DatabaseManager.SessionManager.Completed); // wait for report generation to complete
             return p;
         }
 
@@ -318,15 +337,39 @@ namespace EnvironmentAssessment
             List<CService> servers = new List<CService> { };
             servers.AddRange(DiscoveredServers.OfType<CService>());
 
+            servers = servers.OrderBy(o => o.Name).ToList();
+
+            string lastServerName = "";
+            int lastServerType = -1;
+
             for (int i = 0; i < servers.Count(); i++)
             {
-                CQuery q = servers[i].Session.Queries[0];
-                for (int j = 0; j < q.Result.Count; j++)
+                //Log.Write(servers[i].Name);
+                if ((lastServerName.ToLower() == servers[i].Name.ToLower()) && (lastServerType == servers[i].Type))
                 {
-                    CServiceConfig sc = q.Result[j];
-                    for (int k = 0; k < servers.Count(); k++) { if (servers[k].Name == sc.Name) { servers.RemoveAt(k); } }
+                    servers.RemoveAt(i); // same server name with same server type
+                }
+                else
+                {
+                    CQuery q = servers[i].Session.Queries[0];
+                    for (int j = 0; j < q.Result.Count; j++)
+                    {
+                        CDiscoveredConfig sc = q.Result[j];
+                        for (int k = 0; k < servers.Count(); k++) {
+                            // server already exists as another server's child
+                            if (servers[k].Name.ToLower() == sc.Name.ToLower() && (servers[k].Id != servers[i].Id)) { servers.RemoveAt(k); } } 
+                    }
+                }
+
+                if (i < servers.Count)
+                {
+                    lastServerName = servers[i].Name;
+                    lastServerType = servers[i].Type;
                 }
             }
+
+            DiscoveredServers.Clear();
+            DiscoveredServers.AddRange(servers);
         }
 
         void ProgressPanelUpdate(int p, string status = "", List<CTaskInfo> SessionInfo = null)
@@ -403,6 +446,7 @@ namespace EnvironmentAssessment
                 btnPrevious.Content = Pages[Navigation.ActivePage].ButtonText[0];
                 btnNext.Content = Pages[Navigation.ActivePage].ButtonText[1];
                 btnCancelFinish.Content = Pages[Navigation.ActivePage].ButtonText[2];
+                btnCancelFinish.Style = (Style)FindResource("WizardOKCancelButtonStyle");
                 ((DockPanel)cntMain.Child).Children.Add(Pages[Navigation.ActivePage].Controls[j]);
 
             }
@@ -430,7 +474,7 @@ namespace EnvironmentAssessment
         private void ThreadCleanup()
         {
             if (CollectionManager != null) { CollectionManager.Abort(); CollectionManager.Dispose(); } // stop collection threads
-            if (ReportManager != null) { ReportManager.Abort(); ReportManager.Dispose(); }
+            if (DatabaseManager != null) { DatabaseManager.Abort(); DatabaseManager.Dispose(); }
             
             if (Core.ThreadManager != null) { Core.ThreadManager.Abort(); Core.ThreadManager.Dispose(); } // stop master tracking thread, can make cleaner
         }

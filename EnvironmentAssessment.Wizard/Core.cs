@@ -24,6 +24,7 @@ using EnvironmentAssessment.Common;
 using System.Threading;
 using System.Globalization;
 using System.Net;
+using Microsoft.Win32;
 
 namespace EnvironmentAssessment
 {
@@ -34,8 +35,9 @@ namespace EnvironmentAssessment
         public static string ProductFullName = ((AssemblyTitleAttribute)Attribute.GetCustomAttribute(Assembly.GetEntryAssembly(), typeof(AssemblyTitleAttribute), false)).Title;
         public static string ProductVersion = Assembly.GetEntryAssembly().GetName().Version.ToString();
         public static string ProductBuild = ((AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(Assembly.GetEntryAssembly(), typeof(AssemblyInformationalVersionAttribute), false)).InformationalVersion;
+        public static string ProductRegistry = @"HKEY_LOCAL_MACHINE\SOFTWARE\" + Assembly.GetEntryAssembly().GetName().Name;
         public static string TempPath = System.IO.Path.GetTempPath() + ProductName;
-        public static string IncludesPath = Core.TempPath + "\\includes";
+        public static string IncludesPath = Core.TempPath + "\\include";
         public static string DatabasePath = Core.TempPath + "\\data";
 
         public static CThreadManager ThreadManager = new CThreadManager();
@@ -44,7 +46,12 @@ namespace EnvironmentAssessment
         internal static string _Arguments;
         internal static string _Executable = System.Reflection.Assembly.GetExecutingAssembly().Location.Replace('/', '\\');
         internal static bool _HasException = false;
+        internal static string _WinRegistry = @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion\";
 
+        internal static bool _DatabaseInitialized = false;
+        internal static bool _AllowVersionChecking = true;
+        internal static bool _AllowUsageChecking = true;
+        internal static bool _AllowErrorReporting = true;
         internal static string _ReportURI;
 
         [STAThread]
@@ -62,15 +69,24 @@ namespace EnvironmentAssessment
 
             Log.Write(new String('=', 78), -2);
             Log.Write("{", -2);
-            Log.Write("  Executable: " + _Executable.Substring(_Executable.LastIndexOf('\\') + 1).ToLower(), -2);
+            Log.Write("  Executable: " + _Executable.Substring(_Executable.LastIndexOf('\\') + 1), -2);
 
             Log.Write("  Arguments: " + _Arguments, -2);
-            Log.Write("  Version: " + ProductVersion, -2);
-            Log.Write("  Build: " + ProductBuild, -2);
+            Log.Write("  Product version: " + ProductVersion, -2);
+            Log.Write("  Product build: " + ProductBuild, -2);
 
-            OperatingSystem os = Environment.OSVersion;
-            Log.Write("  OS version: " + os.VersionString + ", OS service pack: " + os.ServicePack, -2);
-            Log.Write("  User culture: " + Thread.CurrentThread.CurrentCulture.Name + ", OS culture: " + CultureInfo.InstalledUICulture, 2);
+
+            var OSName = Registry.GetValue(_WinRegistry, "ProductName", "");
+            var OSVersion = Registry.GetValue(_WinRegistry, "CurrentVersion", "");
+            var OSBuild = Registry.GetValue(_WinRegistry, "CurrentBuild", "");
+            object OSRelease; try { OSRelease = Registry.GetValue(_WinRegistry, "ReleaseId", ""); } catch { OSRelease = null; }
+            if (OSRelease != null) { OSBuild += OSBuild + "." + OSRelease; }
+
+            var OSBuildLabEx = Registry.GetValue(_WinRegistry, "BuildLabEx", "");
+
+            Log.Write("  OS version: " + OSName + " " + OSVersion + "." + OSBuild, -2);
+            Log.Write("  OS build: " + OSBuildLabEx, -2);
+            Log.Write("  User locale: " + Thread.CurrentThread.CurrentCulture.Name + ", OS locale: " + CultureInfo.InstalledUICulture, 2);
             Log.Write("}", -2);
 
             // ignore invalid SSL errors, warn user in logs (might move up higher in code later on)
@@ -84,15 +100,12 @@ namespace EnvironmentAssessment
                 return true; // **** Always accept
             };
 
-            if (args != null && args.Length > 0)
-            {
-            }
-            else
-            {
+            //if (args.Length <= 0)
+            //{
                 _App = new App();
                 _App.InitializeComponent();
                 _App.Run();
-            }
+            //}
         }
     }
 }

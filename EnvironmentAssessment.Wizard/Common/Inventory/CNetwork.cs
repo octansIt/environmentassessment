@@ -55,24 +55,6 @@ namespace EnvironmentAssessment.Common.Inventory
 
         }
 
-        internal static string IPToStringNz(System.Net.IPAddress ip)
-        {
-            if (ip != null)
-            {
-                return ip.ToString();
-            }
-            return "";
-        }
-
-        internal static string ProtocolToStringNz(Protocols protocol)
-        {
-            if (protocol != null)
-            {
-                return protocol.ToString();
-            }
-            return "";
-        }
-
         static internal string CheckPortStatus(IPAddress ip, ushort port)
         {
             string error = "";
@@ -84,7 +66,7 @@ namespace EnvironmentAssessment.Common.Inventory
 
             foreach (IPAddress localIP in localIPs)
             {
-                strLocalIPs += localIP.ToString() + ",";
+                strLocalIPs += localIP.ToString() + ", ";
                 if (localIP.Equals(ip))
                 {
                     skip = true;
@@ -93,11 +75,11 @@ namespace EnvironmentAssessment.Common.Inventory
 
             if (!skip)
             {
-                Log.Write(CFunctions.StringReplace("Checking port connectivity before logon. Connecting to remote machine ({0}) from local machine with addresses ({1}).", ip.ToString(), strLocalIPs), Log.Verbosity.Debug);
+                Log.Write(CFunctions.StringReplace("Checking ports before logon. Connecting to remote machine ({0}) from local machine with addresses ({1}).", ip.ToString(), strLocalIPs), Log.Verbosity.Debug);
                 using (TcpClient client = new TcpClient())
                 {
                     var result = client.BeginConnect(ip, port, null, null);
-                    var success = result.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(COptions.Connection_Timeout));
+                    var success = result.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(COptions.Connection_Timeout),true);
                     if (!success)
                     {
                         error = CFunctions.StringReplace("A connection timeout occurred, make sure {0}:{1} is available.", ip.ToString(), port.ToString());

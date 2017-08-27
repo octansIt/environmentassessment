@@ -12,11 +12,14 @@ namespace EnvironmentAssessment.Collector
         {
             private int _type;
 
-            private static string[] QueryTypes = { "Host", "Datastore", "Guest" };
+            internal static string[] QueryTypes = { "Host", "Datastore", "Guest", "Component", "Event", "Log"  };
 
             public const int Hosts = 0;
             public const int Datastores = 1;
             public const int VMs = 2;
+            public const int Components = 3;
+            public const int Events = 4;
+            public const int Logs = 5;
 
             public Types(int t = -1)
             {
@@ -40,29 +43,29 @@ namespace EnvironmentAssessment.Collector
             }
         }
         internal CSession Session = null;
-        internal Types Type;
+        internal int Type;
         internal bool Started = false;
         internal bool Completed = false;
-        internal string ID;
+        internal string Id;
         internal List<CSite> Sites = new List<CSite> { };
-        internal List<CServiceConfig> Result = new List<CServiceConfig> { };
+        internal List<CDiscoveredConfig> Result = new List<CDiscoveredConfig> { };
         internal CTaskInfo Progress = null;
         internal string Error = "";
         internal List<string> Warnings = new List<string> { };
 
-        public CQuery(ref CSession parent, Types type, List<CSite> sites, string uid)
+        public CQuery(ref CSession parent, int type, List<CSite> sites, string uid)
         {
             Session = parent;
             Type = type;
             Sites = sites;
-            ID = uid;
-            Progress = new CTaskInfo { Status = new CTaskInfo.State(CTaskInfo.State.Active), Service = Session.Server.Name, StartTime = CFunctions.GetDateTime(0), UID = uid, Details = "Collecting " + Type.ToString().ToLower() + " info from " + Session.Server.Type.ToString() + " " + Session.Server.Name.ToUpper() + " (" + Session.Server.IP.ToString() + ")" };
+            Id = uid;
+            Progress = new CTaskInfo { Status = new CTaskInfo.State(CTaskInfo.State.Active), Service = Session.Server.Name, StartTime = CFunctions.GetDateTime(0), UID = uid, Details = "Collecting " + CQuery.Types.QueryTypes[Type].ToString().ToLower() + " info from " + Session.Server.Type.ToString() + " " + Session.Server.Name.ToUpper() + " (" + Session.Server.IP.ToString() + ")" };
             Log.Write(Progress.Details);
         }
 
         public void Dispose()
         {
-            ID = null;
+            Id = null;
             Sites = null;
             Result = null;
         }

@@ -15,7 +15,7 @@ namespace EnvironmentAssessment.Common
 
         internal static void Start(string _ReportURI)
         {
-            Process.Start(Core.TempPath + @"\includes\" + Core.ProductName + ".Web.exe");
+            Process.Start(Core.TempPath + "\\" + Core.ProductName + ".Web.exe");
             Process.Start(Core._ReportURI);
         }
     }

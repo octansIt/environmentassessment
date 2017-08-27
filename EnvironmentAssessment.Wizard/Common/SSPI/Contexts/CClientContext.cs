@@ -1,8 +1,8 @@
 ﻿using System;
-using EnvironmentAssessment.Common.SSPI.Buffers;
-using EnvironmentAssessment.Common.SSPI.Credentials;
+using EnvironmentAssessment.Common.Sspi.Buffers;
+using EnvironmentAssessment.Common.Sspi.Credentials;
 
-namespace EnvironmentAssessment.Common.SSPI.Contexts
+namespace EnvironmentAssessment.Common.Sspi.Contexts
 {
     /// <summary>
     /// Represents a client security context. Provides the means to establish a shared security context

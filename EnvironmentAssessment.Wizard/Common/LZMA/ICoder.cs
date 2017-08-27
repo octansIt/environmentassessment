@@ -4,7 +4,7 @@
 
 using System;
 
-namespace EnvironmentAssessment.Common.LZMA
+namespace EnvironmentAssessment.Common.Lzma
 {
     public interface ICodeProgress
     {
@@ -40,7 +40,7 @@ namespace EnvironmentAssessment.Common.LZMA
         /// <param name="progress">
         /// callback progress reference.
         /// </param>
-        /// <exception cref="LZMA.CDataErrorException">
+        /// <exception cref="Lzma.CDataErrorException">
         /// if input stream is not valid
         /// </exception>
         void Code(System.IO.Stream inStream, System.IO.Stream outStream, Int64 inSize, Int64 outSize, ICodeProgress progress);

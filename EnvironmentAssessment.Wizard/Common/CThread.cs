@@ -12,7 +12,7 @@ namespace EnvironmentAssessment.Common
         public Types Type;
         public bool Started = false;
         public CSession Session;
-        public string ID = "";
+        public string Id = "";
         public bool Completed { get
             {
                 if (Started && !Worker.IsAlive) { return true; }
@@ -57,7 +57,7 @@ namespace EnvironmentAssessment.Common
         public CThread()
         {
             if (Type == null) { Type = new CThread.Types(Types.Unmanaged); }
-            if (ID.Length == 0) { ID = CFunctions.GenerateUID(); }
+            if (Id.Length == 0) { Id = CFunctions.GenerateUID(); }
         }
 
         public void Abort()
@@ -69,7 +69,7 @@ namespace EnvironmentAssessment.Common
         {
             if (Worker != null)
             {
-                if (Worker.Name == null) { Worker.Name = ID; }
+                if (Worker.Name == null) { Worker.Name = Id; }
                 Worker.Start();
                 Started = true;
             }

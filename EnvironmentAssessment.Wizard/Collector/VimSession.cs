@@ -1,6 +1,6 @@
 ﻿using EnvironmentAssessment.Common;
 using EnvironmentAssessment.Common.Inventory;
-using EnvironmentAssessment.Common.VISoap;
+using EnvironmentAssessment.Common.VimApi;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,16 +19,22 @@ namespace EnvironmentAssessment.Collector
         
         internal List<CSite> _SiteInfo = new List<CSite> { };
 
-        private Dictionary<string, Common.VISoap.HostSystem> _VIHosts;
-        private object _VIHostCacheLock = new Object();
-        private Dictionary<string, HostNetworkSystem> _VIHostNetworkSystem;
-        private object _VIHostNetworkSystemCacheLock = new Object();
-        private Dictionary<string, string> _VIDatacenters;
-        private Dictionary<string, string> _VIClusters;
-        private HashSet<string> _VIFilesFoundCache;
-        private object _VIFilesFoundCacheLock = new Object();
-        private HashSet<string> _VIMountPoints;
-        private Dictionary<string, CStorageConfig> _VIMountPointInfo;
+        private Dictionary<string, string> ObjectUidCache;
+
+        private Dictionary<string, Common.VimApi.HostSystem> HostCache;
+        private object _HostCacheLock = new Object();
+
+        private Dictionary<string, string> DatacenterCache;
+        private Dictionary<string, string> ClusterCache;
+
+        private Dictionary<string, HostNetworkSystem> HostNetworkSystemCache;
+        private object _HostNetworkSystemCacheLock = new Object();
+        
+        private HashSet<string> FilesFoundCache;
+        private object _FilesFoundCacheLock = new Object();
+
+        //private HashSet<string> _VIMountPointCache;
+        private Dictionary<string, CDiscoveredConfig> MountPointInfoCache;
 
         public VimSession(ref CService _Server)
         {
@@ -40,7 +46,7 @@ namespace EnvironmentAssessment.Collector
             int result = 0;
 
             // make session ID equal to latest query id added, mostly for progress tracking purposes
-            SessionID = Queries[Queries.Count - 1].ID;
+            SessionID = Queries[Queries.Count - 1].Id;
 
             if (this.Error.Length > 0) // don't run if we experienced errors before
             { Completed = true; result = -1; return result; }
@@ -56,14 +62,6 @@ namespace EnvironmentAssessment.Collector
 
                 if (Error.Length == 0)
                 {
-                    _VIHosts = new Dictionary<string, Common.VISoap.HostSystem> { };
-                    _VIHostNetworkSystem = new Dictionary<string, HostNetworkSystem> { };
-                    _VIDatacenters = new Dictionary<string, string> { };
-                    _VIClusters = new Dictionary<string, string> { };
-                    _VIFilesFoundCache = new HashSet<string> { };
-                    _VIMountPoints = new HashSet<string> { };
-                    _VIMountPointInfo = new Dictionary<string, CStorageConfig> { };
-
                     VIClient = new VimClient();
 
                     if ((Server.UserName.ToLower() == (Environment.UserDomainName + "\\" + Environment.UserName).ToLower()) && (Server.UserPassword.Length == 0)) { VISession = VIClient.LoginSSPI(this); }
@@ -96,20 +94,117 @@ namespace EnvironmentAssessment.Collector
             }
         }
 
-        internal List<CServiceConfig> GetVIHosts(int queryid)
+        internal List<CDiscoveredConfig> GetHosts(int queryid)
         {
-            List<CServiceConfig> HostsFound = new List<CServiceConfig> { };
+            List<CDiscoveredConfig> HostsFound = new List<CDiscoveredConfig> { };
 
             // dont continue if not logged in
             if (VISession == null) { return HostsFound; }
 
+            _SiteInfo = Server.Session.Queries[queryid].Sites;
+            HostCache = new Dictionary<string, Common.VimApi.HostSystem> { };
+            ClusterCache = GetClusterCache();
+            DatacenterCache = GetDatacenterCache();
+
+            IList<EntityViewBase> hosts = null;
+            try { Log.Write("[VimApi] Querying hosts associated with " + Server.Name.ToUpper()); hosts = VIClient.FindEntityViews(typeof(HostSystem), null, null, new string[] { "name", "parent", "vm", "datastore", "runtime", "runtime", "configstatus", "configissue", "config.product", "configmanager.networksystem", "config.fileSystemVolume", "config.storageDevice", "hardware.cpuinfo", "hardware.memorysize", "hardware.systeminfo" }); }
+            catch (Exception ex) { Log.Write("Error: Cannot query host system information. Details: " + ex.TargetSite + ex.Message); }
+            if (hosts != null)
+            {
+                // change counter information to be more accurate as it may count empty objects
+                // cache host queries
+                Log.Write(CFunctions.StringReplace("Found hosts ({0}) associated with {1}", hosts.Count.ToString(), Server.Name.ToUpper()));
+                foreach (EntityViewBase tmp in hosts)
+                {
+                    Common.VimApi.HostSystem host = null;
+                    try { host = (Common.VimApi.HostSystem)tmp; }
+                    catch { /* do nothing */ }
+                    if (host != null)
+                    {
+                        lock (_HostCacheLock)
+                        {
+                            if ((host.Name != null) && !(HostCache.ContainsKey(host.MoRef.ToString())))
+                            {
+                                HostCache.Add(host.MoRef.ToString(), host);
+                            }
+                        }
+                    }
+                }
+
+                lock (_HostCacheLock)
+                {
+                    foreach (Common.VimApi.HostSystem host in HostCache.Values)
+                    {
+                        if (host != null)
+                        {
+                            // get host ip address
+                            System.Net.IPAddress ipaddr = null;
+                            HostNetworkSystem hostnetwork = GetHostNetworkCached(host);
+                            if (hostnetwork != null) { IPAddress.TryParse(hostnetwork.NetworkConfig.Vnic[0].Spec.Ip.IpAddress, out ipaddr); }
+
+                            // get cluster and datacenter
+                            string cluster = RetrieveCluster(host.Parent.ToString());
+                            string datacenter = RetrieveDatacenter(host.Parent.ToString());
+
+                            // get operating system
+                            string os = null;
+                            if (host.Config != null) { os = host.Config.Product.FullName; }
+
+
+                            // get the rest of the details
+                            CDiscoveredMetrics hostmetrics = new CDiscoveredMetrics();
+                            hostmetrics.Set(CMetricType.HostCpu, CMetricSubtype.Sockets, host.Hardware.CpuInfo.NumCpuPackages);
+                            hostmetrics.Set(CMetricType.HostCpu, CMetricSubtype.Cores, host.Hardware.CpuInfo.NumCpuCores);
+                            hostmetrics.Set(CMetricType.HostMem, CMetricSubtype.Allocated, CFunctions.ConvertDataUnit(host.Hardware.MemorySize, CDataUnitType.Byte, CDataUnitType.MiB));
+                            hostmetrics.Set(CMetricType.VmCount, CMetricSubtype.None, host.Vm.Count());
+                            hostmetrics.Set(CMetricType.DsCount, CMetricSubtype.None, host.Datastore.Count());
+
+                            CDiscoveredAttributes hostattribs = new CDiscoveredAttributes();
+                            hostattribs.Set(CAttributeType.Reference, host.MoRef.ToString());
+                            hostattribs.Set(CAttributeType.OS, os);
+                            hostattribs.Set(CAttributeType.IP, ipaddr.ToStringNz());
+                            hostattribs.Set(CAttributeType.HardwareVersion, (host.Hardware.SystemInfo.Vendor + " " + host.Hardware.SystemInfo.Model).Replace(",", String.Empty));
+                            hostattribs.Set(CAttributeType.Cluster, cluster);
+                            hostattribs.Set(CAttributeType.Datacenter, datacenter);
+
+                            CDiscoveredAttributes stateattribs = new CDiscoveredAttributes();
+                            hostattribs.Merge(GetObjectState(host));
+
+                            CDiscoveredConfig hostinfo = new CDiscoveredConfig()
+                            {
+                                Type = new CDiscoveredTypes(CDiscoveredTypes.VIHost),
+                                Site = CSite.Resolve(ipaddr, _SiteInfo),
+                                Name = host.Name.ToString(),
+                                Attributes = hostattribs,
+                                Metrics = hostmetrics,
+                                Owner = new List<string> { Server.Id },
+                            };
+
+                            if ((hosts.Count == 1) && (Server.Type == CServiceType.ESXServer)) { hostinfo.Id = Server.Id; }
+                            StoreObjectUid(hostinfo.Attributes.Get(CAttributeType.Reference), hostinfo.Id);
+
+                            Log.Write(hostinfo.ToString(), Log.Verbosity.Debug);
+
+                            HostsFound.Add(hostinfo);
+                        }
+                    }
+                }
+            }
+
+            HostsFound = HostsFound.OrderBy(o => o.Name).ToList(); // sort alphabetically
+            return HostsFound;
+        }
+
+        private Dictionary<string, string> GetClusterCache()
+        {
+            Dictionary<string, string> results = new Dictionary<string, string> { };
             IList<EntityViewBase> clusters = null;
             try
             {
-                Log.Write("[ViSoap] Querying clusters assocated with " + Server.Name.ToUpper());
+                Log.Write("[VimApi] Querying clusters associated with " + Server.Name.ToUpper());
                 clusters = VIClient.FindEntityViews(typeof(ClusterComputeResource), null, null, new string[] { "name", "parent", "host" });
             }
-            catch (Exception ex) { Log.Write("Cannot query cluster information. Error: " + ex.TargetSite + ex.Message); }
+            catch (Exception ex) { Log.Write("Error: Cannot query cluster information. Details: " + ex.TargetSite + ex.Message); }
             if (clusters != null)
             {
                 Log.Write(CFunctions.StringReplace("Found clusters ({0}) associated with {1}", clusters.Count.ToString(), Server.Name.ToUpper()));
@@ -124,21 +219,26 @@ namespace EnvironmentAssessment.Collector
                         {
                             foreach (ManagedObjectReference hostref in cluster.Host)
                             {
-                                _VIClusters.Add(hostref.ToString(), cluster.Name + ";" + cluster.Parent.ToString());
+                                results.Add(hostref.ToString(), cluster.Name + ";" + cluster.Parent.ToString());
                             }
-                            _VIClusters.Add(cluster.MoRef.ToString(), cluster.Name + ";" + cluster.Parent.ToString());
+                            results.Add(cluster.MoRef.ToString(), cluster.Name + ";" + cluster.Parent.ToString());
                         }
                     }
                 }
             }
+            return results;
+        }
 
+        private Dictionary<string, string> GetDatacenterCache()
+        {
+            Dictionary<string, string> results = new Dictionary<string, string> { };
             IList<EntityViewBase> datacenters = null;
             try
             {
-                Log.Write("[ViSoap] Querying datacenters assocated with " + Server.Name.ToUpper());
+                Log.Write("[VimApi] Querying datacenters associated with " + Server.Name.ToUpper());
                 datacenters = VIClient.FindEntityViews(typeof(Datacenter), null, null, new string[] { "name", "HostFolder" });
             }
-            catch (Exception ex) { Log.Write("Cannot query datacenter information. Error: " + ex.TargetSite + ex.Message); }
+            catch (Exception ex) { Log.Write("Error: Cannot query datacenter information. Details: " + ex.TargetSite + ex.Message); }
             if (datacenters != null)
             {
                 Log.Write(CFunctions.StringReplace("Found datacenters ({0}) associated with {1}", datacenters.Count.ToString(), Server.Name.ToUpper()));
@@ -151,92 +251,42 @@ namespace EnvironmentAssessment.Collector
                     {
                         if (datacenter.Name != null)
                         {
-                            _VIDatacenters.Add(datacenter.HostFolder.ToString(), datacenter.Name);
+                            results.Add(datacenter.HostFolder.ToString(), datacenter.Name);
                         }
                     }
                 }
             }
-
-            IList<EntityViewBase> hosts = null;
-            try { Log.Write("[ViSoap] Querying hosts associated with " + Server.Name.ToUpper()); hosts = VIClient.FindEntityViews(typeof(Common.VISoap.HostSystem), null, null, new string[] { "name", "parent", "vm", "datastore", "runtime", "runtime", "configstatus", "configissue", "config.product", "configmanager.networksystem", "config.fileSystemVolume", "config.storageDevice", "hardware.cpuinfo", "hardware.memorysize", "hardware.systeminfo" }); }
-            catch (Exception ex) { Log.Write("Cannot query host system information. Error: " + ex.TargetSite + ex.Message); }
-            if (hosts != null)
-            {
-                // change counter information to be more accurate as it may count empty objects
-                // cache host queries
-                Log.Write(CFunctions.StringReplace("Found hosts ({0}) associated with {1}", hosts.Count.ToString(), Server.Name.ToUpper()));
-                foreach (EntityViewBase tmp in hosts)
-                {
-                    Common.VISoap.HostSystem host = null;
-                    try { host = (Common.VISoap.HostSystem)tmp; }
-                    catch { /* do nothing */ }
-                    if (host != null)
-                    {
-                        lock (_VIHostCacheLock)
-                        {
-                            if ((host.Name != null) && !(_VIHosts.ContainsKey(host.MoRef.ToString())))
-                            {
-                                _VIHosts.Add(host.MoRef.ToString(), host);
-                            }
-                        }
-                    }
-                }
-
-                lock (_VIHostCacheLock)
-                {
-                    foreach (Common.VISoap.HostSystem host in _VIHosts.Values)
-                    {
-                        if (host != null)
-                        {
-                            // get host ip address
-                            System.Net.IPAddress ipaddr = null;
-                            HostNetworkSystem hostnetwork = GetVIHostNetworkCached(host);
-                            if (hostnetwork != null) { IPAddress.TryParse(hostnetwork.NetworkConfig.Vnic[0].Spec.Ip.IpAddress, out ipaddr); }
-
-                            // get cluster and datacenter
-                            string cluster = GetVICluster(host.Parent.ToString());
-                            string datacenter = GetVIDatacenter(host.Parent.ToString());
-
-                            // get operating system
-                            string os = null;
-                            if (host.Config != null) { os = host.Config.Product.FullName; }
-
-                            // get the rest of the details
-                            CServiceConfig hostinfo = new CServiceConfig()
-                            {
-                                Site = CSite.Resolve(ipaddr, _SiteInfo),
-                                Name = host.Name.ToString(),
-                                IP = ipaddr,
-                                OS = os,
-                                CPUSockets = host.Hardware.CpuInfo.NumCpuPackages,
-                                CPUCores = host.Hardware.CpuInfo.NumCpuCores,
-                                RAM = (Int64)Math.Round((host.Hardware.MemorySize / Math.Pow(1024, 2)), MidpointRounding.AwayFromZero),
-                                _HardwareVersion = (host.Hardware.SystemInfo.Vendor + " " + host.Hardware.SystemInfo.Model).Replace(",", String.Empty),
-                                State = GetVIObjectState(host),
-                                Cluster = cluster,
-                                Datacenter = datacenter,
-                                Children = new List<string> { host.Vm.Count().ToString(), host.Datastore.Count().ToString() }
-                            };
-
-                            string logdata = "  ";
-                            if (hostinfo.Site != null) { logdata = hostinfo.Site.Name + ","; }
-                            if (hostinfo.Datacenter.Length > 0) { logdata += hostinfo.Datacenter + ","; }
-                            if (hostinfo.Cluster.Length > 0) { logdata += hostinfo.Cluster + ","; }
-
-                            logdata += hostinfo.Name + "," + hostinfo.IP + "," + hostinfo.OS + "," + hostinfo.CPUSockets + " (" + hostinfo.CPUCores + " cores),memory:" + hostinfo.RAM + " (MB)," + hostinfo._HardwareVersion;
-                            Log.Write(logdata, Log.Verbosity.Debug);
-
-                            HostsFound.Add(hostinfo);
-                        }
-                    }
-                }
-            }
-
-            HostsFound = HostsFound.OrderBy(o => o.Name).ToList(); // sort alphabetically
-            return HostsFound;
+            return results;
         }
 
-        private HostNetworkSystem GetVIHostNetworkCached(Common.VISoap.HostSystem host)
+
+        private string RetrieveDatacenter(string p)
+        {
+            string result = "";
+            string cluster = "";
+            if (ClusterCache != null)
+            {
+                if (ClusterCache.TryGetValue(p, out cluster))
+                {
+                    string hostfolder = cluster.Split(';')[1];
+                    DatacenterCache.TryGetValue(hostfolder, out result);
+                }
+            }
+            return result;
+        }
+
+        private string RetrieveCluster(string p)
+        {
+            string result = "";
+            string cluster = "";
+            if (ClusterCache != null)
+            {
+                if (ClusterCache.TryGetValue(p, out cluster)) { result = cluster.Split(';')[0]; }
+            }
+            return result;
+        }
+
+        private HostNetworkSystem GetHostNetworkCached(Common.VimApi.HostSystem host)
         {
             if (host == null) { return null; }
 
@@ -244,16 +294,19 @@ namespace EnvironmentAssessment.Collector
             ManagedObjectReference nwref = host.ConfigManager.NetworkSystem;
             string key = nwref.ToString();
 
-            lock (_VIHostNetworkSystemCacheLock)
+            lock (_HostNetworkSystemCacheLock)
             {
-                if ((nwref != null) && !(_VIHostNetworkSystem.ContainsKey(key))) // check for cache hit, only populate if not in cache
+                // create cache if it does not exist
+                if (HostNetworkSystemCache == null) { HostNetworkSystemCache = new Dictionary<string, HostNetworkSystem> { }; }
+                // check for cache hit, only populate if not in cache
+                if ((nwref != null) && !(HostNetworkSystemCache.ContainsKey(key)))
                 {
                     networksystem = (HostNetworkSystem)VIClient.GetView(nwref, new string[] { "networkconfig" });
-                    _VIHostNetworkSystem.Add(key, networksystem);
+                    HostNetworkSystemCache.Add(key, networksystem);
                 }
                 else
                 {
-                    networksystem = _VIHostNetworkSystem[key];
+                    networksystem = HostNetworkSystemCache[key];
                 }
             }
 
@@ -262,59 +315,46 @@ namespace EnvironmentAssessment.Collector
 
         }
 
-        private string GetVIDatacenter(string p)
+        internal List<CDiscoveredConfig> GetDatastores(int queryid)
         {
-            string result = "";
-            if (_VIClusters.ContainsKey(p))
-            {
-                string hostfolder = _VIClusters[p].Split(';')[1];
-                if (_VIDatacenters.ContainsKey(hostfolder)) { result = _VIDatacenters[hostfolder]; }
-            }
-            return result;
-        }
-
-        private string GetVICluster(string p)
-        {
-            string result = "";
-            if (_VIClusters.ContainsKey(p)) { result = _VIClusters[p].Split(';')[0]; }
-            return result;
-        }
-
-        internal List<CStorageConfig> GetVIDatastores(int queryid)
-        {
-            List<CStorageConfig> DatastoresFound = new List<CStorageConfig> { };
+            List<CDiscoveredConfig> DatastoresFound = new List<CDiscoveredConfig> { };
             IList<EntityViewBase> datastores = null;
+
+            _SiteInfo = Server.Session.Queries[queryid].Sites;
+            //_VIMountPointCache = new HashSet<string> { };
+            MountPointInfoCache = new Dictionary<string, CDiscoveredConfig> { };
 
             if (VIClient != null)
             {
-                try { Log.Write("[ViSoap] Querying datastores associated with " + Server.Name.ToUpper()); datastores = VIClient.FindEntityViews(typeof(Datastore), null, null, new string[] { "configissue", "configstatus", "host", "summary" }); }
-                catch (Exception ex) { Log.Write("Cannot query datastore information. Error: " + ex.TargetSite + ex.Message); }
+                try { Log.Write("[VimApi] Querying datastores associated with " + Server.Name.ToUpper()); datastores = VIClient.FindEntityViews(typeof(Datastore), null, null, new string[] { "configissue", "configstatus", "host", "summary" }); }
+                catch (Exception ex) { Log.Write("Error: Cannot query datastore information. Details: " + ex.TargetSite + ex.Message); }
                 if (datastores != null)
                 {
                     Log.Write("Found datastores (" + datastores.Count + ") associated with " + Server.Name.ToUpper());
                     foreach (EntityViewBase tmp in datastores)
                     {
                         Datastore ds = (Datastore)tmp;
-                        long storagealloc = (Int64)Math.Round(ds.Summary.Capacity / Math.Pow(1024, 2), MidpointRounding.AwayFromZero);
-                        long storageused = (Int64)Math.Round((ds.Summary.Capacity / Math.Pow(1024, 2)) - (ds.Summary.FreeSpace / Math.Pow(1024, 2)), MidpointRounding.AwayFromZero);
-                        CStorageConfig dsinfo;
+                        
+                        long storagealloc = CFunctions.ConvertDataUnit(ds.Summary.Capacity, CDataUnitType.Byte, CDataUnitType.MiB);
+                        long storageused = CFunctions.ConvertDataUnit(ds.Summary.Capacity - ds.Summary.FreeSpace, CDataUnitType.Byte, CDataUnitType.MiB);
 
-                        using (CStorageConfig _dsmountinfo = GetVIDatastoreMountInfo(queryid, ds))
-                        {
-                            if (_dsmountinfo != null) { dsinfo = _dsmountinfo; }
-                            else { dsinfo = new CStorageConfig(); dsinfo.Cluster = ""; dsinfo.Datacenter = ""; }
-                        }
+                        CDiscoveredConfig dsinfo = GetDatastoreMountInfo(queryid, ds);
+                        
+                        CDiscoveredMetrics dsmetric = new CDiscoveredMetrics();
+                        dsmetric.Set(CMetricType.DsDisk, CMetricSubtype.Allocated, storagealloc);
+                        dsmetric.Set(CMetricType.DsDisk, CMetricSubtype.Used, storageused );
 
+                        dsinfo.Attributes.Set(CAttributeType.Reference, ds.MoRef.ToString());
+                        dsinfo.Attributes.Set(CAttributeType.Format, ds.Summary.Type);
+                        dsinfo.Attributes.Merge(GetObjectState(ds));
+
+                        dsinfo.Type = new CDiscoveredTypes(CDiscoveredTypes.VIDatastore);
                         dsinfo.Name = ds.Summary.Name;
-                        dsinfo.Allocated = storagealloc;
-                        dsinfo.Used = storageused;
-                        dsinfo.Type = ds.Summary.Type;
-                        dsinfo.State = GetVIObjectState(ds);
-                        string logdata = "  ";
-                        if (dsinfo.Site != null) { logdata = dsinfo.Site.Name + ","; }
+                        dsinfo.Metrics = dsmetric;
+                        
+                        StoreObjectUid(dsinfo.Attributes.Get(CAttributeType.Reference), dsinfo.Id);
 
-                        logdata += dsinfo.Name.ToUpper() + "," + dsinfo.FullPath + ",allocated:" + dsinfo.Allocated + " (MB) used:" + dsinfo.Used + " (MB)," + dsinfo.Model + "," + dsinfo.Vendor;
-                        Log.Write(logdata, Log.Verbosity.Debug);
+                        Log.Write(dsinfo.ToString(), Log.Verbosity.Debug);
 
                         DatastoresFound.Add(dsinfo);
                     }
@@ -324,7 +364,7 @@ namespace EnvironmentAssessment.Collector
             return DatastoresFound;
         }
 
-        private void QueryVIDatastore(int queryid, string FoldersToQuery, string[] MatchPattern = null)
+        private void QueryDatastore(int queryid, string FoldersToQuery, string[] MatchPattern = null)
         {
             // generate search spec
             HostDatastoreBrowserSearchSpec searchSpec = new HostDatastoreBrowserSearchSpec();
@@ -356,7 +396,7 @@ namespace EnvironmentAssessment.Collector
                         ViewBase vw;
                         try
                         {
-                            Log.Write(CFunctions.StringReplace("[ViSoap] Querying {0} and sub folders for file information (matchpattern:" + String.Join(";", MatchPattern) + ").", folder), Log.Verbosity.Debug);
+                            Log.Write(CFunctions.StringReplace("[VimApi] Querying {0} and sub folders for file information (matchpattern:" + String.Join(";", MatchPattern) + ").", folder), Log.Verbosity.Debug);
                             vw = VIClient.GetView(new ManagedObjectReference(dsref), null);
                         }
                         catch { vw = null; }
@@ -389,15 +429,8 @@ namespace EnvironmentAssessment.Collector
                             {
                                 foreach (FileInfo f in r.File)
                                 {
-                                    string ds = r.FolderPath + f.Path + "," + f.FileSize / Math.Pow(1024, 2);
-                                    lock (_VIFilesFoundCacheLock)
-                                    {
-                                        if (!_VIFilesFoundCache.Contains(ds))
-                                        {
-                                            Log.Write("  " + ds, Log.Verbosity.Everything);
-                                            _VIFilesFoundCache.Add(ds);
-                                        }
-                                    }
+                                    string ds = r.FolderPath + f.Path + "," + CFunctions.ConvertDataUnit(f.FileSize,CDataUnitType.Byte,CDataUnitType.MiB);
+                                    StoreFilesFound(ds);
                                 }
                             }
                         }
@@ -406,11 +439,23 @@ namespace EnvironmentAssessment.Collector
             }
         }
 
-        private HashSet<string> QueryVIDatastores(int queryid, HashSet<string> FilesToQuery, string[] MatchPattern = null)
+        private void StoreFilesFound(string ds)
+        {
+            lock (_FilesFoundCacheLock)
+            {
+                if (!FilesFoundCache.Contains(ds))
+                {
+                    Log.Write("  " + ds, Log.Verbosity.Everything);
+                    FilesFoundCache.Add(ds);
+                }
+            }
+        }
+
+        private HashSet<string> QueryDatastores(int queryid, HashSet<string> FilesToQuery, string[] MatchPattern = null)
         {
             // enumerate list of unique folders to query
             List<string> FoldersToQuery = new List<string> { };
-            _VIFilesFoundCache = new HashSet<string> { };
+            FilesFoundCache = new HashSet<string> { };
 
             // generate match pattern
             if (MatchPattern == null) { MatchPattern = new string[] { "*.vmdk" }; }
@@ -448,7 +493,7 @@ namespace EnvironmentAssessment.Collector
                     string tid = CFunctions.GenerateUID();
                     Log.Write("Starting thread (" + tid + ") to run datastore query (query: " + q + ", folders: " + dsFolderQuery + ", matchpattern: " + String.Join(";", m) + ").", Log.Verbosity.Debug);
 
-                    CThread query = new CThread() { Worker = new Thread(new ThreadStart(delegate () { QueryVIDatastore(q, dsFolderQuery, m); })), ID = tid };
+                    CThread query = new CThread() { Worker = new Thread(new ThreadStart(delegate () { QueryDatastore(q, dsFolderQuery, m); })), Id = tid };
 
                     DatastoreQueries.Add(query);
                     Core.ThreadManager.Add(query); // start thread when slots are available
@@ -471,40 +516,45 @@ namespace EnvironmentAssessment.Collector
 
             } while (!DatastoreQueryCompleted);
 
-            return _VIFilesFoundCache;
+            return FilesFoundCache;
         }
 
-        private CStorageConfig GetVIDatastoreMountInfo(int queryid, Datastore ds) // needs to be rewritten and optimized
+        private CDiscoveredConfig GetDatastoreMountInfo(int queryid, Datastore ds) // needs to be rewritten and optimized
         {
-            CStorageConfig result = null;
+            CDiscoveredConfig MountInfoFound = new CDiscoveredConfig {};
+            MountInfoFound.Attributes = new CDiscoveredAttributes();
+
             string dsMountPath = null;
 
             // check input datastore value
-            if (ds == null) { return result; }
+            if (ds == null) { return MountInfoFound; } // give partial object
             if (ds.Summary != null) { if (ds.Summary.Url != null) { dsMountPath = ds.Summary.Url.Replace("ds://", "").TrimEnd('/'); } }
             if (dsMountPath == null)
             {
                 Queries[queryid].Warnings.Add(CFunctions.StringReplace("Cannot get datastore info from {0}. No summary data accessible.", ds.MoRef.ToString()));
                 Log.Write("Warning: " + Queries[queryid].Warnings.Last());
-                return result;
+                return MountInfoFound; // give partial object;
             }
 
             // find out about mount point if not already done
-            if (!_VIMountPointInfo.ContainsKey(dsMountPath))
+            if (!MountPointInfoCache.ContainsKey(dsMountPath))
             {
-                string dsHostRef = null;
-                string dsHostName = "";
-                Common.VISoap.HostSystem dsHost = null;
+                //string dsHostRef = null;
+                //string dsHostName = "";
+                Common.VimApi.HostSystem dsHost = null;
                 IPAddress dsHostAddr = null;
                 List<string> dsOwners = new List<string> { };
 
                 for (int i = 0; i < ds.Host.Count(); i++)
                 {
-                    Common.VISoap.HostSystem h = GetVIHostCached(ds.Host[i].Key);
+                    Common.VimApi.HostSystem h = GetHostCached(ds.Host[i].Key);
                     if (h != null)
                     {
-                        if (dsHost == null) { dsHost = h; dsHostName = h.Name; dsHostRef = ds.Host[i].Key.ToString(); }
-                        dsOwners.Add(h.Name);
+                        dsOwners.Add(RetrieveObjectUid(h.MoRef.ToString()));
+                        if ((dsHost == null) || (dsHost != null && (CompareObjectState(dsHost, h) > 0)))
+                        {
+                            dsHost = h;
+                        }
                     }
                     else
                     {
@@ -512,26 +562,32 @@ namespace EnvironmentAssessment.Collector
                         Log.Write("Warning: " + Queries[queryid].Warnings.Last());
                     }
                 }
-                if (dsHost == null) { return result; /* give up */ }
+                if (dsHost == null) { return MountInfoFound; /* give partial object */ }
 
-                string dsHostCluster = GetVICluster(dsHost.Parent.ToString());
-                string dsHostDatacenter = GetVIDatacenter(dsHost.Parent.ToString());
+                string dsHostCluster = RetrieveCluster(dsHost.Parent.ToString());
+                string dsHostDatacenter = RetrieveDatacenter(dsHost.Parent.ToString());
+
                 HostFileSystemMountInfo[] dsHostMountInfo = null;
+
+                MountInfoFound.Owner = dsOwners;
+                MountInfoFound.Attributes.Set(CAttributeType.Cluster, dsHostCluster);
+                MountInfoFound.Attributes.Set(CAttributeType.Datacenter, dsHostDatacenter);
 
                 try
                 {
-                    HostNetworkSystem hostnetwork = GetVIHostNetworkCached(dsHost);
+                    HostNetworkSystem hostnetwork = GetHostNetworkCached(dsHost);
                     if (hostnetwork != null) { IPAddress.TryParse(hostnetwork.NetworkConfig.Vnic[0].Spec.Ip.IpAddress, out dsHostAddr); }
                     dsHostMountInfo = dsHost.Config.FileSystemVolume.MountInfo;
                 }
                 catch
                 {
-                    Queries[queryid].Warnings.Add(CFunctions.StringReplace("Cannot get datastore info from {0}. Cannot get info from host {1} ({2})", ds.Summary.Name, dsHostName, dsHostRef));
+                    Queries[queryid].Warnings.Add(CFunctions.StringReplace("Cannot get datastore info from {0}. Cannot get info from host {1} ({2})", ds.Summary.Name, dsHost.Name, dsHost.MoRef.ToString()));
                     Log.Write("Warning: " + Queries[queryid].Warnings.Last());
-                    return result; /* give up */
+                    return MountInfoFound; /* give up */
                 }
 
                 CSite dsHostSite = CSite.Resolve(dsHostAddr, _SiteInfo);
+                MountInfoFound.Site = dsHostSite;
 
                 for (int i = 0; i < dsHostMountInfo.Count(); i++)
                 {
@@ -544,12 +600,12 @@ namespace EnvironmentAssessment.Collector
                             {
                                 if (m.MountInfo.Path.ToString() == dsMountPath) // we have a match 
                                 {
-                                    CStorageConfig mountInfo = new CStorageConfig { FullPath = m.MountInfo.Path.ToString(), Site = dsHostSite, Cluster = dsHostCluster, Datacenter = dsHostDatacenter, Owner = dsOwners };
-                                    mountInfo = GetViDatastoreMountDetails(queryid, ds, dsHost, mountInfo, m);
+                                    MountInfoFound.Attributes.Set(CAttributeType.Path, m.MountInfo.Path.ToString());
+                                    MountInfoFound = GetDatastoreMountDetails(queryid, ds, dsHost, MountInfoFound, m);
 
-                                    if (mountInfo != null)
+                                    if (MountInfoFound != null)
                                     {
-                                        _VIMountPointInfo.Add(dsMountPath, mountInfo);
+                                        MountPointInfoCache.Add(dsMountPath, MountInfoFound);
                                         i = dsHostMountInfo.Count(); //exit for
                                     }
                                 }
@@ -560,42 +616,52 @@ namespace EnvironmentAssessment.Collector
             }
 
             // output mountpoint info
-            if (_VIMountPointInfo.ContainsKey(dsMountPath))
-            {
-                result = _VIMountPointInfo[dsMountPath];
-                string extents = String.Join(";", result.Children);
-                Log.Write("  " + result.FullPath + "," + result.Owner[0] + ",local:" + result.Local.ToString().ToLower() + "," + result.Mode + "," + result.Type + "," + extents + "," + result.Model + "," + result.Vendor + "," + result.Details, Log.Verbosity.Debug);
-            }
+            MountPointInfoCache.TryGetValue(dsMountPath, out MountInfoFound);
+            //if (MountPointInfoCache.ContainsKey(dsMountPath))
+            //{
+                MountInfoFound = MountPointInfoCache[dsMountPath];
+                //string extents = String.Join(";", result.Children);
+                //Log.Write("  " + result.Path + "," + result.Owner[0] + ",local:" + result.Local.ToString().ToLower() + "," + result.Mode + "," + result.Type + "," + extents + "," + result.Model + "," + result.Vendor + "," + result.Details, Log.Verbosity.Debug);
+            //}
 
-            return result;
+            return MountInfoFound;
         }
 
-        private CStorageConfig GetViDatastoreMountDetails(int queryid, Datastore ds, Common.VISoap.HostSystem dsHost, CStorageConfig mountInfo, HostFileSystemMountInfo m)
+        private CDiscoveredConfig GetDatastoreMountDetails(int queryid, Datastore ds, Common.VimApi.HostSystem dsHost, CDiscoveredConfig mi, HostFileSystemMountInfo m)
         {
-            CStorageConfig mi = mountInfo;
+            if (m == null) { return mi; }
+            
+            mi.ChildInfo = new List<string> { };
             string accessMode = m.MountInfo.AccessMode;
 
             if (m.Volume is HostNasVolume)
             {
                 HostNasVolume vol = (HostNasVolume)m.Volume;
-                mi.Local = false;
-                mi.Mode = accessMode;
-                mi.Type = vol.Type;
-                mi.Details = vol.RemoteHost;
+                mi.Attributes.Set(CAttributeType.Local, "false");
+                mi.Attributes.Set(CAttributeType.Mode, accessMode);
+                mi.Attributes.Set(CAttributeType.Format, vol.Type);
+                mi.Attributes.Set(CAttributeType.Details, vol.RemoteHost);
             }
             else if (m.Volume is HostVvolVolume)
             {
                 HostVvolVolume vol = (HostVvolVolume)m.Volume;
-                mi.Local = false;
-                mi.Mode = accessMode;
-                mi.Type = vol.Type;
+                mi.Attributes.Set(CAttributeType.Local, "false");
+                mi.Attributes.Set(CAttributeType.Mode, accessMode);
+                mi.Attributes.Set(CAttributeType.Format, vol.Type);
+            }
+            else if (m.Volume is HostFileSystemVolume)
+            {
+                HostFileSystemVolume vol = (HostFileSystemVolume)m.Volume;
+                mi.Attributes.Set(CAttributeType.Local, "false");
+                mi.Attributes.Set(CAttributeType.Mode, accessMode);
+                mi.Attributes.Set(CAttributeType.Format, vol.Type);
             }
             else if (m.Volume is HostVfatVolume)
             {
                 HostVfatVolume vol = (HostVfatVolume)m.Volume;
-                mi.Local = true;
-                mi.Mode = accessMode;
-                mi.Type = "VFatVolume";
+                mi.Attributes.Set(CAttributeType.Local, "true");
+                mi.Attributes.Set(CAttributeType.Mode, accessMode);
+                mi.Attributes.Set(CAttributeType.Format, "VFatVolume");
             }
             else if (m.Volume is HostVmfsVolume)
             {
@@ -628,22 +694,22 @@ namespace EnvironmentAssessment.Collector
                 }
 
                 // rollup extents
-                foreach (string extent in extents) { mi.Children.Add(extent); }
+                foreach (string extent in extents) { mi.ChildInfo.Add(extent); }
 
                 // adding mountpoint info
-                mi.Local = volLocal;
-                mi.Mode = accessMode;
-                mi.Model = extentDiskModel;
-                mi.Vendor = extentDiskVendor;
-                mi.Details = extentDiskName;
-                mi.Type = diskType;
+                mi.Attributes.Set(CAttributeType.Local, volLocal.ToString());
+                mi.Attributes.Set(CAttributeType.Mode, accessMode);
+                mi.Attributes.Set(CAttributeType.Model, extentDiskModel);
+                mi.Attributes.Set(CAttributeType.Vendor, extentDiskVendor);
+                mi.Attributes.Set(CAttributeType.Details, extentDiskName);
+                mi.Attributes.Set(CAttributeType.Format, diskType);
 
             }
             else
             {
                 mi = null;
                 string mountVolume = "";
-                if (m != null) { if (m.Volume != null) { mountVolume = m.Volume.GetType().ToString(); } }
+                if (m.Volume != null) { mountVolume = m.Volume.GetType().ToString(); }
 
                 Queries[queryid].Warnings.Add(CFunctions.StringReplace("Cannot get datastore info from {0}. Unsupported datastore type: {1}", ds.Summary.Name, mountVolume));
                 Log.Write("Warning: " + Queries[queryid].Warnings.Last());
@@ -652,43 +718,45 @@ namespace EnvironmentAssessment.Collector
             return mi;
         }
 
-        private Common.VISoap.HostSystem GetVIHostCached(ManagedObjectReference hostref)
+        private Common.VimApi.HostSystem GetHostCached(ManagedObjectReference hostref)
         {
-            Common.VISoap.HostSystem host = null;
-            lock (_VIHostCacheLock)
+            Common.VimApi.HostSystem host = null;
+            lock (_HostCacheLock)
             {
-                if ((hostref != null) && !(_VIHosts.ContainsKey(hostref.ToString())))
+                if ((hostref != null) && !(HostCache.ContainsKey(hostref.ToString())))
                 {
                     try
                     {
-                        host = (Common.VISoap.HostSystem)VIClient.GetView(hostref, new string[] { "name", "parent", "vm", "datastore", "runtime", "configissue", "configstatus", "config.product", "configmanager.networksystem", "config.fileSystemVolume", "config.storageDevice", "hardware.cpuinfo", "hardware.memorysize", "hardware.systeminfo" });
+                        host = (Common.VimApi.HostSystem)VIClient.GetView(hostref, new string[] { "name", "parent", "vm", "datastore", "runtime", "configissue", "configstatus", "config.product", "configmanager.networksystem", "config.fileSystemVolume", "config.storageDevice", "hardware.cpuinfo", "hardware.memorysize", "hardware.systeminfo" });
                     }
                     catch (VimException ex)
                     {
                         host = null;
                         Log.Write("Cannot query host information. Error: " + ex.TargetSite + ex.Message);
                     }
-                    _VIHosts.Add(hostref.ToString(), host); // add null hosts to prevent multiple queries for references that resolve to nothing
+                    HostCache.Add(hostref.ToString(), host); // add null hosts to prevent multiple queries for references that resolve to nothing
                 }
                 else
                 {
-                    host = _VIHosts[hostref.ToString()];
+                    host = HostCache[hostref.ToString()];
                 }
             }
             return host;
         }
 
-        internal List<CServiceConfig> GetVIVMs(int queryid)
+        internal List<CDiscoveredConfig> GetVms(int queryid)
         {
-            List<CServiceConfig> VMsFound = new List<CServiceConfig> { };
+            List<CDiscoveredConfig> VMsFound = new List<CDiscoveredConfig> { };
 
             // dont continue if not logged in
             if (VISession == null) { return VMsFound; }
 
+            _SiteInfo = Server.Session.Queries[queryid].Sites;
+
             // get vm info
             IList<EntityViewBase> vms = null;
-            try { Log.Write("[ViSoap] Querying virtual machines associated with " + Server.Name.ToUpper()); vms = VIClient.FindEntityViews(typeof(VirtualMachine), null, null, new string[] { "parent", "configissue", "configstatus", "summary.storage", "summary.config", "config.name", "config.memoryallocation", "config.hardware", "config.version", "config.tools", "guest", "runtime", "layout.disk" }); }
-            catch (Exception ex) { Log.Write("Cannot query virtual machine information. Error: " + ex.TargetSite + ex.Message); }
+            try { Log.Write("[VimApi] Querying virtual machines associated with " + Server.Name.ToUpper()); vms = VIClient.FindEntityViews(typeof(VirtualMachine), null, null, new string[] { "parent", "configissue", "configstatus", "summary.storage", "summary.config", "config.name", "config.memoryallocation", "config.hardware", "config.version", "config.tools", "guest", "runtime", "layout.disk" }); }
+            catch (Exception ex) { Log.Write("Error: Cannot query virtual machine information. Details: " + ex.TargetSite + ex.Message); }
             if (vms != null)
             {
                 // iterate through vms and get general information
@@ -704,55 +772,42 @@ namespace EnvironmentAssessment.Collector
                         IPAddress ipaddr = null;
                         if (vm.Guest.IpAddress != null) { IPAddress.TryParse(vm.Guest.IpAddress, out ipaddr); }
 
-                        // storage usage, automatically exclude swap file size if powered on
-                        double vswpusage = 0;
-                        if (vm.Runtime.PowerState.ToString() == "poweredOn") { vswpusage = vm.Config.Hardware.MemoryMB - Convert.ToInt32(vm.Config.MemoryAllocation.Reservation); }
+                        string cluster = RetrieveCluster(vm.Runtime.Host.ToString());
+                        string datacenter = RetrieveDatacenter(vm.Runtime.Host.ToString());
 
-                        double storagealloc = (vm.Summary.Storage.Committed + vm.Summary.Storage.Uncommitted) / Math.Pow(1024, 2);
-                        if ((storagealloc - vswpusage) > 0) { storagealloc -= vswpusage; }
-                        double storageused = vm.Summary.Storage.Committed / Math.Pow(1024, 2);
-                        if ((storageused - vswpusage) > 0) { storageused -= vswpusage; }
-                        double storageunshared = vm.Summary.Storage.Unshared / Math.Pow(1024, 2);
-                        if ((storageunshared - vswpusage) > 0) { storageunshared -= vswpusage; }
+                        string owner = "";
+                        Common.VimApi.HostSystem host = GetHostCached(vm.Runtime.Host);
+                        if (host != null) { owner = RetrieveObjectUid(host.MoRef.ToString()); }
+                        
+                        CDiscoveredMetrics guestusage = GetVmDiskUsage(queryid, vm);
+                        guestusage.Set(CMetricType.VmCpu, CMetricSubtype.Sockets, vm.Config.Hardware.NumCPU);
+                        guestusage.Set(CMetricType.VmCpu, CMetricSubtype.Cores, ((int)vm.Config.Hardware.NumCPU * vm.Config.Hardware.NumCoresPerSocket.GetValueOrDefault(1)));
+                        guestusage.Set(CMetricType.VmMem, CMetricSubtype.Allocated, vm.Config.Hardware.MemoryMB);
+                        
+                        CDiscoveredAttributes guestattribs = new CDiscoveredAttributes();
+                        guestattribs.Set(CAttributeType.Reference, vm.MoRef.ToString());
+                        guestattribs.Set(CAttributeType.OS, vm.Summary.Config.GuestFullName);
+                        guestattribs.Set(CAttributeType.IP, ipaddr.ToStringNz());
+                        guestattribs.Set(CAttributeType.HardwareVersion, vm.Config.Version);
+                        guestattribs.Set(CAttributeType.ToolsVersion, vm.Config.Tools.ToolsVersion.GetValueOrDefault(0).ToString());
+                        guestattribs.Set(CAttributeType.Cluster, cluster);
+                        guestattribs.Set(CAttributeType.Datacenter, datacenter);
+                        guestattribs.Merge(GetObjectState(vm));
 
-                        Int64[] diskusagereported = new Int64[] { (long)Math.Round(storagealloc, MidpointRounding.AwayFromZero), (long)Math.Round(storageused, MidpointRounding.AwayFromZero), (long)Math.Round(storageunshared, MidpointRounding.AwayFromZero) }; // need to expand depending on disk info
-                        Int64[] diskusageactual = new Int64[] { 0, 0 };
-                        //if (COptions.Preciseness == COptions.Precision.Medium)
-                        //{
-                        //   diskusageactual = diskusagereported;
-                        //}
-                        List<CStorageConfig> disks = GetVIVMDisks(queryid, vm);
-                        string cluster = GetVICluster(vm.Runtime.Host.ToString());
-                        string datacenter = GetVIDatacenter(vm.Runtime.Host.ToString());
-                        string hostname = "";
-                        Common.VISoap.HostSystem host = GetVIHostCached(vm.Runtime.Host);
-                        if (host != null) { hostname = host.Name; }
-
-                        CServiceConfig guestinfo = new CServiceConfig
+                        CDiscoveredConfig guestinfo = new CDiscoveredConfig
                         {
+                            Type = new CDiscoveredTypes(CDiscoveredTypes.VIVM),
                             Site = CSite.Resolve(ipaddr, _SiteInfo),
                             Name = vm.Config.Name.ToString(),
-                            IP = ipaddr,
-                            OS = vm.Summary.Config.GuestFullName,
-                            CPUSockets = vm.Config.Hardware.NumCPU,
-                            CPUCores = ((int)vm.Config.Hardware.NumCPU * vm.Config.Hardware.NumCoresPerSocket.GetValueOrDefault(1)),
-                            RAM = vm.Config.Hardware.MemoryMB,
-                            DiskUsageReported = diskusagereported,
-                            DiskUsageActual = diskusageactual,
-                            Disks = GetVIVMDisks(queryid, vm),
-                            _HardwareVersion = vm.Config.Version,
-                            _ToolsVersion = vm.Config.Tools.ToolsVersion.GetValueOrDefault(0).ToString(),
-                            Cluster = cluster,
-                            Datacenter = datacenter,
-                            State = GetVIObjectState(vm),
-                            Owner = new List<string> { hostname }
+                            Attributes = guestattribs,
+                            Metrics = guestusage,
+                            Owner = new List<string> { owner }
                         };
 
-                        string logdata = "  ";
-                        if (guestinfo.Site != null) { logdata = guestinfo.Site.Name + ","; }
+                        StoreObjectUid(guestinfo.Attributes.Get(CAttributeType.Reference), guestinfo.Id);
+                        guestinfo.ChildObjects = GetVmDisks(queryid, vm);
 
-                        logdata += guestinfo.Name.ToUpper() + "," + guestinfo.IP + "," + guestinfo.OS + "," + guestinfo.CPUSockets + " (" + guestinfo.CPUCores + " cores),memory:" + guestinfo.RAM + " (MB),allocated:" + guestinfo.DiskUsageReported[0] + " (MB),used:" + guestinfo.DiskUsageReported[1] + " (MB),unshared:" + guestinfo.DiskUsageReported[2] + " (MB),integration tools version: " + guestinfo._ToolsVersion;
-                        Log.Write(logdata, Log.Verbosity.Debug);
+                        Log.Write(guestinfo.ToString(), Log.Verbosity.Debug);
 
                         VMsFound.Add(guestinfo);
                     }
@@ -760,43 +815,148 @@ namespace EnvironmentAssessment.Collector
 
                 VMsFound = VMsFound.OrderBy(o => o.Name).ToList(); // sort alphabetically
 
-                // get additional details for thin vmdk files
-                VMsFound = UpdateVIVMDiskDatastoreInfo(queryid, VMsFound);
+                // need to improve this in the future where either we use the integration tools
+                // if that does not work, use datastore information for thin disks (UpdateVmDiskDatastoreInfo)
+                // and if that does not work use the summary object.
+                VMsFound = UpdateVmDiskDatastoreInfo(queryid, VMsFound);
             }
 
             return VMsFound;
         }
 
-        private CDiscoveredState GetVIObjectState(object obj)
+        private void StoreObjectUid(string v, string id)
         {
-            CDiscoveredState result = null;
+            if (ObjectUidCache == null) { ObjectUidCache = new Dictionary<string, string> { }; }
+            ObjectUidCache.Add(v, id);
+        }
+
+        private string RetrieveObjectUid(string reference)
+        {
+            string result = "";
+            ObjectUidCache.TryGetValue(reference, out result);
+            return result;
+        }
+
+        private CDiscoveredAttributes GetObjectState(EntityViewBase obj)
+        {
+            CDiscoveredAttributes result = new CDiscoveredAttributes();
             if (obj.GetType().ToString().Contains("VirtualMachine"))
             {
                 VirtualMachine vm = (VirtualMachine)obj;
                 string issues = "";
                 foreach (Event e in vm.ConfigIssue) { issues += e.FullFormattedMessage + ";"; }
-                result = new CDiscoveredState() { PowerState = vm.Runtime.PowerState.ToString(), ConfigState = vm.ConfigStatus.ToString(), ConfigIssues = issues, ConnectionState = vm.Runtime.ConnectionState.ToString() };
+                result.Set(CAttributeType.PowerState, vm.Runtime.PowerState.ToString());
+                result.Set(CAttributeType.ConfigState, vm.ConfigStatus.ToString());
+                result.Set(CAttributeType.ConfigIssues, issues);
+                result.Set(CAttributeType.ConnectionState, vm.Runtime.ConnectionState.ToString());
             }
-            if (obj.GetType().ToString().Contains("HostSystem"))
+            else if (obj.GetType().ToString().Contains("HostSystem"))
             {
-                Common.VISoap.HostSystem host = (Common.VISoap.HostSystem)obj;
+                Common.VimApi.HostSystem host = (Common.VimApi.HostSystem)obj;
                 string issues = "";
                 foreach (Event e in host.ConfigIssue) { issues += e.FullFormattedMessage + ";"; }
-                result = new CDiscoveredState() { PowerState = host.Runtime.PowerState.ToString(), ConfigState = host.ConfigStatus.ToString(), ConfigIssues = issues, ConnectionState = host.Runtime.ConnectionState.ToString() };
+                result.Set(CAttributeType.PowerState, host.Runtime.PowerState.ToString());
+                result.Set(CAttributeType.ConfigState, host.ConfigStatus.ToString());
+                result.Set(CAttributeType.ConfigIssues, issues);
+                result.Set(CAttributeType.ConnectionState, host.Runtime.ConnectionState.ToString());
             }
-            if (obj.GetType().ToString().Contains("Datastore"))
+            else if (obj.GetType().ToString().Contains("Datastore"))
             {
                 Datastore ds = (Datastore)obj;
                 string issues = "";
                 foreach (Event e in ds.ConfigIssue) { issues += e.FullFormattedMessage + ";"; }
-                result = new CDiscoveredState() { ConfigState = ds.ConfigStatus.ToString(), ConfigIssues = issues, };
+                result.Set(CAttributeType.ConfigState, ds.ConfigStatus.ToString());
+                result.Set(CAttributeType.ConfigIssues, issues);
             }
             return result;
         }
 
-        private List<CStorageConfig> GetVIVMDisks(int queryid, VirtualMachine vm)
+        private int GetObjectConfigStatus(EntityViewBase obj)
         {
-            List<CStorageConfig> DisksFound = new List<CStorageConfig> { };
+            int result = 0;
+            if (obj.GetType().ToString().Contains("VirtualMachine"))
+            {
+                VirtualMachine vm = (VirtualMachine)obj;
+                result = (int)vm.ConfigStatus;
+            }
+            else if (obj.GetType().ToString().Contains("HostSystem"))
+            {
+                Common.VimApi.HostSystem host = (Common.VimApi.HostSystem)obj;
+                result = (int)host.ConfigStatus;
+            }
+            else if (obj.GetType().ToString().Contains("Datastore"))
+            {
+                Datastore ds = (Datastore)obj;
+                result = (int)ds.ConfigStatus;
+            }
+            return result;
+        }
+
+        private int CompareObjectState(EntityViewBase obj1, EntityViewBase obj2)
+        {
+            int result = 0;
+            int s1 = GetObjectConfigStatus(obj1);
+            int s2 = GetObjectConfigStatus(obj2);
+            if (s1 < s2)
+            {
+                result = -1;
+            }
+            else if (s1 > s2)
+            {
+                result = 1;
+            }
+            return result;
+        }
+
+        private CDiscoveredMetrics GetVmDiskUsage(int queryid, VirtualMachine vm)
+        {
+            CDiscoveredMetrics DiscoveredMetrics = new CDiscoveredMetrics();
+
+            double vmSwapfileUsage = 0;
+            if (vm.Runtime.PowerState.ToString() == "poweredOn") { vmSwapfileUsage = vm.Config.Hardware.MemoryMB - Convert.ToInt32(vm.Config.MemoryAllocation.Reservation); }
+
+            // need to improve this in the future where either we use the integration tools
+            // if that does not work, use datastore information for thin disks (UpdateVmDiskDatastoreInfo)
+            // and if that does not work use the summary object.
+
+            if (vm.Guest.Disk != null) // get vm disk information from integration tools
+            {
+                foreach (GuestDiskInfo disk in vm.Guest.Disk)
+                {
+                    DiscoveredMetrics.Increment(CMetricType.VmDisk, CMetricSubtype.Allocated, CFunctions.ConvertDataUnit(disk.Capacity.Value,CDataUnitType.Byte,CDataUnitType.MiB));
+                    DiscoveredMetrics.Increment(CMetricType.VmDisk, CMetricSubtype.Used, CFunctions.ConvertDataUnit(disk.Capacity.Value - disk.FreeSpace.Value,CDataUnitType.Byte,CDataUnitType.MiB));
+                }
+            }
+            else // get vm disk information from summary object
+            {
+                
+                double allocated = CFunctions.ConvertDataUnit(vm.Summary.Storage.Committed + vm.Summary.Storage.Uncommitted, CDataUnitType.Byte, CDataUnitType.MiB);
+                double used = CFunctions.ConvertDataUnit(vm.Summary.Storage.Committed, CDataUnitType.Byte, CDataUnitType.MiB);
+                if (vmSwapfileUsage > 0)
+                {
+                    if ((allocated - vmSwapfileUsage) > 0) { allocated -= vmSwapfileUsage; }
+                    if ((used - vmSwapfileUsage) > 0) { used -= vmSwapfileUsage; }  
+                }
+
+                DiscoveredMetrics.Set(CMetricType.VmDisk, CMetricSubtype.Allocated, (long)allocated);
+                DiscoveredMetrics.Set(CMetricType.VmDisk, CMetricSubtype.Used, (long)used);
+            }
+
+            // no way to tell unshared memory from integration tools 
+            // so always use this method
+            double unshared = CFunctions.ConvertDataUnit(vm.Summary.Storage.Unshared,CDataUnitType.Byte,CDataUnitType.MiB);
+            if (vmSwapfileUsage > 0)
+            {
+                if ((unshared - vmSwapfileUsage) > 0) { unshared -= vmSwapfileUsage; }
+            }
+            DiscoveredMetrics.Set(CMetricType.VmDisk, CMetricSubtype.Unshared, (long)unshared);
+
+            return DiscoveredMetrics;
+        }
+
+        private List<CDiscoveredConfig> GetVmDisks(int queryid, VirtualMachine vm)
+        {
+            List<CDiscoveredConfig> DisksFound = new List<CDiscoveredConfig> { };
 
             // validate vm object
             if ((vm.Config.Hardware.Device == null) || (vm.Layout.Disk == null)) { return DisksFound; } // don't continue if we don't have hardware information or disk layout information
@@ -812,7 +972,7 @@ namespace EnvironmentAssessment.Collector
                 object dsref = null, mode = null;
                 bool thin = false;
                 string path = null, name = null;
-
+                
                 if (backinginfo != null)
                 {
                     foreach (var p in backinginfo.GetType().GetProperties())
@@ -830,12 +990,22 @@ namespace EnvironmentAssessment.Collector
                         name = path.Split(']')[1].Trim();
                         if (name.Contains('/')) { name = name.Substring(name.LastIndexOf('/') + 1); } // get filename by itself
 
+                        string parent = RetrieveObjectUid(vm.MoRef.ToString());
+
                         // set VM size info, and if not thin make these the same
-                        long allocated = (Int64)Math.Round(disk.CapacityInKB / Math.Pow(1024, 1), MidpointRounding.AwayFromZero);
+                        long allocated = CFunctions.ConvertDataUnit(disk.CapacityInKB, CDataUnitType.KiB, CDataUnitType.MiB);
                         long used = 0;
                         if (!thin) { used = allocated; }
 
-                        DisksFound.Add(new CStorageConfig() { Name = name, FullPath = path, _DSRef = dsref.ToString(), Thin = thin, Mode = mode.ToString(), Allocated = allocated, Used = used });
+                        CDiscoveredMetrics diskusage = new CDiscoveredMetrics();
+                        diskusage.Set(CMetricType.VmDisk, CMetricSubtype.Allocated, allocated);
+                        diskusage.Set(CMetricType.VmDisk, CMetricSubtype.Used, used);
+                        CDiscoveredAttributes diskattribs = new CDiscoveredAttributes();
+                        diskattribs.Set(CAttributeType.Path, path);
+                        diskattribs.Set(CAttributeType.Reference, dsref.ToStringNz());
+                        diskattribs.Set(CAttributeType.Thin, thin.ToString());
+                        diskattribs.Set(CAttributeType.Mode, mode.ToStringNz());
+                        DisksFound.Add(new CDiscoveredConfig() { Name = name, Attributes = diskattribs, Metrics = diskusage, Type = CDiscoveredTypes.VIDisk, Owner = new List<string> { parent } } );
                     }
                 }
             }
@@ -865,20 +1035,28 @@ namespace EnvironmentAssessment.Collector
                             if (diskchild.Contains(name + ".vmdk") || (diskchild.Contains(name + "-"))) /* exact match or differencing disk */ { loc = i; i = DisksFound.Count; /* exit loop */ }
 
                         }
-                        if (loc != -1) { DisksFound[loc].Children.Add(diskchild); }
+                        if (loc != -1) {
+                            if (DisksFound[loc].ChildInfo == null) { DisksFound[loc].ChildInfo = new List<string> { }; }
+                            DisksFound[loc].ChildInfo.Add(diskchild); }
                         else
                         {
                             /* no parent disk found -- add it as new parent */
                             string rootPath = diskchild.Split(']')[0].Replace("[", "").Trim();
-                            string dsRef = DisksFound[0]._DSRef; // revert to default datastore if nothing is found (cheating -- I know, but remember we're searching a list of already known datastores and files so we should be safe)
+                            string dsRef = DisksFound[0].Attributes.Get(CAttributeType.Reference); // revert to default datastore if nothing is found (cheating -- I know, but remember we're searching a list of already known datastores and files so we should be safe)
                             string name = diskchild.Split(']')[1].Trim();
                             if (name.Contains('/')) { name = name.Substring(name.LastIndexOf('/') + 1); } // get filename by itself
                             for (int i = 0; i < DisksFound.Count; i++) // get datastore reference if we already have one
                             {
-                                if (DisksFound[i].FullPath.Contains(rootPath)) { dsRef = DisksFound[i]._DSRef; i = DisksFound.Count; }
+                                if (DisksFound[i].Attributes.Get(CAttributeType.Path).Contains(rootPath)) { dsRef = DisksFound[i].Attributes.Get(CAttributeType.Reference); i = DisksFound.Count; }
                             }
-                            DisksFound.Add(new CStorageConfig() { Name = name, FullPath = diskchild, Allocated = 0, Thin = true, _DSRef = dsRef });
-                            DisksFound[DisksFound.Count - 1].Children.Add(diskchild);
+                            CDiscoveredMetrics diskmetrics = new CDiscoveredMetrics(CMetricType.VmDisk, CMetricSubtype.Used, 0);
+                            CDiscoveredAttributes diskattribs = new CDiscoveredAttributes();
+                            diskattribs.Set(CAttributeType.Path, diskchild);
+                            diskattribs.Set(CAttributeType.Thin, "true");
+                            diskattribs.Set(CAttributeType.Reference, dsRef);
+                            DisksFound.Add(new CDiscoveredConfig() { Name = name, Attributes = diskattribs, Metrics = diskmetrics });
+                            if (DisksFound[DisksFound.Count - 1].ChildInfo == null) { DisksFound[DisksFound.Count - 1].ChildInfo = new List<string> { }; }
+                            DisksFound[DisksFound.Count - 1].ChildInfo.Add(diskchild);
                         }
                     }
                 }
@@ -888,7 +1066,7 @@ namespace EnvironmentAssessment.Collector
 
         }
 
-        private List<CServiceConfig> UpdateVIVMDiskDatastoreInfo(int queryid, List<CServiceConfig> vms) // issue with math here
+        private List<CDiscoveredConfig> UpdateVmDiskDatastoreInfo(int queryid, List<CDiscoveredConfig> vms) // issue with math here
         {
             HashSet<string> FilesToQuery = new HashSet<string> { };
             HashSet<string> QueryResults = new HashSet<string> { };
@@ -900,16 +1078,16 @@ namespace EnvironmentAssessment.Collector
                 // organize data for query
                 for (int i = 0; i < vms.Count; i++)
                 {
-                    if ((vms[i].Disks) != null)
+                    if ((vms[i].ChildObjects) != null)
                     {
-                        for (int j = 0; j < vms[i].Disks.Count; j++)
+                        for (int j = 0; j < vms[i].ChildObjects.Count; j++)
                         {
-                            CStorageConfig disk = vms[i].Disks[j];
-                            if (disk.Thin)
+                            CDiscoveredConfig disk = vms[i].ChildObjects[j];
+                            if (disk.Attributes.Get(CAttributeType.Thin) == "true")
                             { // depends on compile-time constant
                               // need to update logic to detect if _DSRef refers to a VSAN datastore at which point it is better to use VI_Datastore_Search_Level = 1
-                                if (COptions.VI_Datastore_Search_Level == 0) { string fq = disk._DSRef + "," + disk.FullPath.Split(']')[0] + "]"; if (!FilesToQuery.Contains(fq)) { FilesToQuery.Add(fq); } }
-                                else if (COptions.VI_Datastore_Search_Level == 1) { string fq = disk._DSRef + "," + disk.FullPath; if (!FilesToQuery.Contains(fq)) { FilesToQuery.Add(fq); } }
+                                if (COptions.VI_Datastore_Search_Level == 0) { string fq = disk.Attributes.Get(CAttributeType.Reference) + "," + disk.Attributes.Get(CAttributeType.Path).Split(']')[0] + "]"; if (!FilesToQuery.Contains(fq)) { FilesToQuery.Add(fq); } }
+                                else if (COptions.VI_Datastore_Search_Level == 1) { string fq = disk.Attributes.Get(CAttributeType.Reference) + "," + disk.Attributes.Get(CAttributeType.Path); if (!FilesToQuery.Contains(fq)) { FilesToQuery.Add(fq); } }
                             }
                         }
                     }
@@ -922,17 +1100,17 @@ namespace EnvironmentAssessment.Collector
                     string dsfilesize = dsfile.Split(',')[1];
                     for (int i = 0; i < vms.Count; i++)
                     {
-                        for (int j = 0; j < vms[i].Disks.Count; j++)
+                        for (int j = 0; j < vms[i].ChildObjects.Count; j++)
                         {
-                            if (vms[i].Disks[j].FullPath == dsfilepath)
+                            if (vms[i].ChildObjects[j].Attributes.Get(CAttributeType.Path) == dsfilepath)
                             {
-                                vms[i].Disks[j].Used = 0; // found disk, clear incorrect "approximate data" from vSphere                        
+                                vms[i].ChildObjects[j].Metrics.Set(CMetricType.VmDisk, CMetricSubtype.Used, 0); // found disk, clear incorrect "approximate data" from vSphere                        
                             }
                         }
                     }
                 }
 
-                QueryResults = QueryVIDatastores(queryid, FilesToQuery);
+                QueryResults = QueryDatastores(queryid, FilesToQuery);
 
                 // put data back into array
                 foreach (string dsfile in QueryResults)
@@ -942,14 +1120,14 @@ namespace EnvironmentAssessment.Collector
 
                     for (int i = 0; i < vms.Count; i++)
                     {
-                        for (int j = 0; j < vms[i].Disks.Count; j++)
+                        for (int j = 0; j < vms[i].ChildObjects.Count; j++)
                         {
-                            for (int k = 0; k < vms[i].Disks[j].Children.Count(); k++)
+                            for (int k = 0; k < vms[i].ChildObjects[j].ChildInfo.Count(); k++)
                             {
-                                if (vms[i].Disks[j].Children[k] == dsfilepath)
+                                if (vms[i].ChildObjects[j].ChildInfo[k] == dsfilepath)
                                 {
-                                    vms[i].Disks[j].Used += (Int64)Math.Round(Double.Parse(dsfilesize), MidpointRounding.AwayFromZero);
-                                    vms[i].Disks[j].Children[k] += "," + Double.Parse(dsfilesize); // append file size to child name
+                                    vms[i].ChildObjects[j].Metrics.Increment(CMetricType.VmDisk, CMetricSubtype.Used, (Int64)Math.Round(Double.Parse(dsfilesize), MidpointRounding.AwayFromZero));
+                                    vms[i].ChildObjects[j].ChildInfo[k] += "," + Double.Parse(dsfilesize); // append file size to child name
                                 }
                             }
                         }
@@ -960,29 +1138,29 @@ namespace EnvironmentAssessment.Collector
                 Int64[] diskusageactual = new Int64[] { 0, 0 };
                 for (int i = 0; i < vms.Count; i++)
                 {
-                    for (int j = 0; j < vms[i].Disks.Count; j++)
+                    for (int j = 0; j < vms[i].ChildObjects.Count; j++)
                     {
-                        vms[i].DiskUsageActual[0] += vms[i].Disks[j].Allocated;
-                        vms[i].DiskUsageActual[1] += vms[i].Disks[j].Used;
+                        vms[i].Metrics.Increment(CMetricType.VmDisk, CMetricSubtype.Allocated, vms[i].ChildObjects[j]);
+                        vms[i].Metrics.Increment(CMetricType.VmDisk, CMetricSubtype.Used, vms[i].ChildObjects[j]);
                     }
                 }
             }
 
             // output results
-            if (COptions.Verbosity >= Log.Verbosity.Debug)
+            /* if (COptions.Verbosity >= Log.Verbosity.Debug)
             {
-                foreach (CServiceConfig vm in vms)
+                foreach (CDiscoveredConfig vm in vms)
                 {
                     Log.Write(CFunctions.StringReplace("Found disks ({0}) associated with {1}", vm.Disks.Count.ToString(), vm.Name.ToUpper()), Log.Verbosity.Debug);
-                    foreach (CStorageConfig disk in vm.Disks)
+                    foreach (CDiscoveredConfig disk in vm.Disks)
                     {
                         // path, total, used, thick/thin
-                        string output = CFunctions.StringReplace("  {0},allocated:{1} (MB),used:{2} (MB),thin:{3},(disk parts:", disk.FullPath, disk.Allocated.ToString(), disk.Used.ToString(), disk.Thin.ToString().ToLower());
+                        string output = CFunctions.StringReplace("  {0},allocated:{1} (MB),used:{2} (MB),thin:{3},(disk parts:", disk.Path, disk.Metrics.Get(CMetricType.VmDisk, CMetricSubtype.Allocated).ToString(), disk.Metrics.Get(CMetricType.VmDisk, CMetricSubtype.Used).ToString(), disk.Metrics.Get(CMetricType.VmDisk, CMetricSubtype.Thin).ToString().ToLower());
                         output += String.Join(";", disk.Children);
                         Log.Write(output + ")", Log.Verbosity.Debug);
                     }
                 }
-            }
+            } */
 
             return vms;
         }
@@ -991,6 +1169,7 @@ namespace EnvironmentAssessment.Collector
             Dispose(true);
             GC.SuppressFinalize(this);
         }
+
         protected new virtual void Dispose(bool disposing)
         {
             if (disposing)
@@ -998,13 +1177,20 @@ namespace EnvironmentAssessment.Collector
                 // do nothing yet
                 if (VIClient != null) { VIClient.Dispose(); VIClient = null; }
             }
-            if (_VIFilesFoundCache != null) { _VIFilesFoundCache.Clear(); _VIFilesFoundCache = null; }
-            if (_VIMountPoints != null) { _VIMountPoints.Clear(); _VIMountPoints = null; }
-            _VIMountPointInfo = null;
-            if (_VIHosts != null) { _VIHosts.Clear(); _VIHosts = null; }
-            if (_VIHostNetworkSystem != null) { _VIHostNetworkSystem.Clear(); _VIHostNetworkSystem = null; }
-            _VIHostCacheLock = null;
-            _VIHostNetworkSystemCacheLock = null;
+            
+            if (HostCache != null) { HostCache.Clear(); HostCache = null; }
+            if (HostNetworkSystemCache != null) { HostNetworkSystemCache.Clear(); HostNetworkSystemCache = null; }
+
+            if (DatacenterCache != null) { DatacenterCache.Clear(); DatacenterCache = null; }
+            if (ClusterCache != null) { ClusterCache.Clear(); ClusterCache= null; }
+
+            //if (_VIMountPointCache != null) { _VIMountPointCache.Clear(); _VIMountPointCache = null; }
+            if (MountPointInfoCache != null) { MountPointInfoCache.Clear(); MountPointInfoCache = null; }
+
+            if (FilesFoundCache != null) { FilesFoundCache.Clear(); FilesFoundCache = null; }
+
+            _HostCacheLock = null;
+            _HostNetworkSystemCacheLock = null;
         }
     }
 }

@@ -6,7 +6,7 @@ namespace EnvironmentAssessment.Reporter
 {
     public class CReportGenerator
     {
-        internal void RollupTotals(CQuery.Types querytype, CSite site, object obj)
+        /* internal void RollupTotals(int querytype, CSite site, object obj)
         {
             if (obj.GetType().FullName.Contains("CServiceConfig"))
             {
@@ -15,9 +15,9 @@ namespace EnvironmentAssessment.Reporter
                     CServiceConfig sc = (CServiceConfig)obj;
                     if (sc.Disks != null)
                     {
-                        foreach (CStorageConfig st in sc.Disks)
+                        foreach (CConfigObject st in sc.Disks)
                         {
-                            if (st.Thin)
+                            if ((bool)st._["thin"])
                             {
                                 site.Details.VMThinUsage[0] += st.Allocated;
                                 site.Details.VMThinUsage[1] += st.Used;
@@ -55,7 +55,7 @@ namespace EnvironmentAssessment.Reporter
                     site.Details.Datastores++; site.Details.DatastoreUsage[0] += st.Allocated; site.Details.DatastoreUsage[1] += st.Used;
                 }
             }
-        }
+        } */
 
     }
 }

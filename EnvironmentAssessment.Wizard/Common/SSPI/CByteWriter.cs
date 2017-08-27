@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace EnvironmentAssessment.Common.SSPI
+namespace EnvironmentAssessment.Common.Sspi
 {
     /// <summary>
     /// Reads and writes value types to byte arrays with explicit endianness.

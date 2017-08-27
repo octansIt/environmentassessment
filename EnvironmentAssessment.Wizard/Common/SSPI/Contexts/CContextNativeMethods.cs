@@ -2,9 +2,9 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
-using EnvironmentAssessment.Common.SSPI.Buffers;
+using EnvironmentAssessment.Common.Sspi.Buffers;
 
-namespace EnvironmentAssessment.Common.SSPI.Contexts
+namespace EnvironmentAssessment.Common.Sspi.Contexts
 {
     /// <summary>
     /// Declares native methods calls for security context-related win32 functions.

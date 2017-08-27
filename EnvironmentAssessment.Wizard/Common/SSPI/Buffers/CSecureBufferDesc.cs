@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI.Buffers
+namespace EnvironmentAssessment.Common.Sspi.Buffers
 {
     /// <summary>
     /// Represents the native layout of the secure buffer descriptor that is provided directly

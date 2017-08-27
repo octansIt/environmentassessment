@@ -2,7 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI
+namespace EnvironmentAssessment.Common.Sspi
 {
     /// <summary>
     /// Queries information about security packages.

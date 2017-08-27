@@ -29,6 +29,7 @@ namespace EnvironmentAssessment.Controls
 
         private void btnClose_Click(object sender, RoutedEventArgs e)
         {
+            Core._AllowErrorReporting = (this.cbkUpload.IsChecked == true);
             this.Close();
         }
 
@@ -42,6 +43,7 @@ namespace EnvironmentAssessment.Controls
         public ExceptionDialog(string ExceptionDetails)
         {
             InitializeComponent();
+            this.cbkUpload.IsChecked = Core._AllowErrorReporting;
             this.Title = Core.ProductFullName;
             if (ExceptionDetails != null) { this.tbkDetails.Text = ExceptionDetails; }
             this.tbkDetails.TextWrapping = TextWrapping.Wrap;

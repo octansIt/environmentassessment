@@ -24,7 +24,7 @@ namespace EnvironmentAssessment.Common
             ThreadManager = new CThread() { Worker = new Thread(new ThreadStart(ManageThreads)) };
             Log.Write("[Threading] Primary thread (" + Thread.CurrentThread.Name + ") of type: '" + ThreadManager.Type + "' with scheduler id: " + Thread.CurrentThread.ManagedThreadId + " started at: " + Core._StartTime, 7);
             ThreadManager.Start();
-            Log.Write("[Threading] Starting new thread (" + ThreadManager.ID + ") of type: '" + ThreadManager.Type + "' with scheduler id: " + ThreadManager.Worker.ManagedThreadId, 7);
+            Log.Write("[Threading] Starting new thread (" + ThreadManager.Id + ") of type: '" + ThreadManager.Type + "' with scheduler id: " + ThreadManager.Worker.ManagedThreadId, 7);
         }
 
         public void ManageThreads()
@@ -40,7 +40,7 @@ namespace EnvironmentAssessment.Common
                     if (thread.Completed)
                     {
                         CompletionCount++;
-                        Log.Write("[Threading] Thread id: " + thread.Worker.ManagedThreadId + " (" + thread.ID + ") has completed.", 7);
+                        Log.Write("[Threading] Thread id: " + thread.Worker.ManagedThreadId + " (" + thread.Id + ") has completed.", 7);
                         ActiveThreads.Remove(thread);
                     }
                 }
@@ -56,7 +56,7 @@ namespace EnvironmentAssessment.Common
 
                         if (start)
                         {
-                            Log.Write("[Threading] Starting new thread (" + thread.ID + ") of type: '" + thread.Type + "' with scheduler id: " + thread.Worker.ManagedThreadId, 7);
+                            Log.Write("[Threading] Starting new thread (" + thread.Id + ") of type: '" + thread.Type + "' with scheduler id: " + thread.Worker.ManagedThreadId, 7);
                             thread.Start();
                             ActiveThreads.Add(thread);
                             QueuedThreads.Remove(thread);
@@ -65,12 +65,12 @@ namespace EnvironmentAssessment.Common
                 }
                 Thread.Sleep(COptions.Thread_Wait);
             } while (!Terminated);
-            Log.Write("[Threading] Thread id: " + Thread.CurrentThread.ManagedThreadId + " (" + ThreadManager.ID + ") has completed.", 7);
+            Log.Write("[Threading] Thread id: " + Thread.CurrentThread.ManagedThreadId + " (" + ThreadManager.Id + ") has completed.", 7);
         }
 
         public void Add(CThread thread)
         {
-            thread.Worker.Name = thread.ID;
+            thread.Worker.Name = thread.Id;
             QueuedThreads.Add(thread);
             if (QueuedCount == -1) { QueuedCount = 1; }
             else { QueuedCount++; }

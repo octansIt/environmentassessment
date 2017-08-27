@@ -1,4 +1,4 @@
-﻿namespace EnvironmentAssessment.Common.SSPI.Buffers
+﻿namespace EnvironmentAssessment.Common.Sspi.Buffers
 {
     /// <summary>
     /// Describes how a buffer's opaque internals should be stored, with regards to byte ordering.

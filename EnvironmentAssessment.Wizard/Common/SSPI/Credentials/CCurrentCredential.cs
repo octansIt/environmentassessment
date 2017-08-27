@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 
-namespace EnvironmentAssessment.Common.SSPI.Credentials
+namespace EnvironmentAssessment.Common.Sspi.Credentials
 {
     /// <summary>
     /// Acquires a handle to the credentials of the user associated with the current process.

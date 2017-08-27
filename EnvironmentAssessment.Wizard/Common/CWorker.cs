@@ -14,7 +14,7 @@ namespace EnvironmentAssessment.Common
             {
                 Started = true;
                 workerThread = new CThread() { Worker = Thread.CurrentThread };
-                Log.Write("[Threading] Starting new thread (" + workerThread.ID + ") of type: '" + workerThread.Type + "' with scheduler id: " + workerThread.Worker.ManagedThreadId, 7);
+                Log.Write("[Threading] Starting new thread (" + workerThread.Id + ") of type: '" + workerThread.Type + "' with scheduler id: " + workerThread.Worker.ManagedThreadId, 7);
                 try
                 {
                     base.OnDoWork(e);
@@ -24,7 +24,7 @@ namespace EnvironmentAssessment.Common
                     e.Cancel = true;
                     Thread.ResetAbort();
                 }
-                if (workerThread != null) { Log.Write("[Threading] Thread id: " + workerThread.Worker.ManagedThreadId + " (" + workerThread.ID + ") has completed.", 7); }
+                if (workerThread != null) { Log.Write("[Threading] Thread id: " + workerThread.Worker.ManagedThreadId + " (" + workerThread.Id + ") has completed.", 7); }
             }
         }
 

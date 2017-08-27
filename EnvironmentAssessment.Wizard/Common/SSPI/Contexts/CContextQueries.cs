@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI.Contexts
+namespace EnvironmentAssessment.Common.Sspi.Contexts
 {
     /// <summary>
     /// Stores the result of a context query for the context's buffer sizes.

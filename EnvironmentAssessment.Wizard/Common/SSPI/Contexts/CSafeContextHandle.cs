@@ -1,6 +1,6 @@
 ﻿using System.Runtime.ConstrainedExecution;
 
-namespace EnvironmentAssessment.Common.SSPI.Contexts
+namespace EnvironmentAssessment.Common.Sspi.Contexts
 {
     /// <summary>
     /// Captures an unmanaged security context handle.

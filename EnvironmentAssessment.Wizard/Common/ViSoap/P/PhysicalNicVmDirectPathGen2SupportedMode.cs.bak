@@ -1,8 +1,0 @@
-using System;
-namespace Veeam.EnvironmentAnalyzer.Common.ViSoap
-{
-	public enum PhysicalNicVmDirectPathGen2SupportedMode
-	{
-		upt
-	}
-}

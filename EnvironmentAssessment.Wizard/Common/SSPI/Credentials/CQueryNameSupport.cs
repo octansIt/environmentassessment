@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI.Credentials
+namespace EnvironmentAssessment.Common.Sspi.Credentials
 {
     /// <summary>
     /// Stores the result from a query of a credential's principle name.

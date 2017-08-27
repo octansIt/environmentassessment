@@ -1,4 +1,4 @@
-﻿namespace EnvironmentAssessment.Common.SSPI.Credentials
+﻿namespace EnvironmentAssessment.Common.Sspi.Credentials
 {
     /// <summary>
     /// Identifies credential query types.

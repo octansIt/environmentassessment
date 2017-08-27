@@ -7,9 +7,9 @@ namespace EnvironmentAssessment.Common.Inventory
 {
     internal class CDiscoveredState
     {
-        internal string PowerState;
-        internal string ConnectionState;
-        internal string ConfigIssues;
-        internal string ConfigState;
+        internal string PowerState = "";
+        internal string ConnectionState = "";
+        internal string ConfigIssues = "";
+        internal string ConfigState = "";
     }
 }

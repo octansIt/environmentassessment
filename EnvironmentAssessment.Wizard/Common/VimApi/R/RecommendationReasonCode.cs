@@ -1,0 +1,36 @@
+namespace EnvironmentAssessment.Common.VimApi
+{
+	public enum RecommendationReasonCode
+	{
+		fairnessCpuAvg,
+		fairnessMemAvg,
+		jointAffin,
+		antiAffin,
+		hostMaint,
+		enterStandby,
+		reservationCpu,
+		reservationMem,
+		powerOnVm,
+		powerSaving,
+		increaseCapacity,
+		checkResource,
+		unreservedCapacity,
+		vmHostHardAffinity,
+		vmHostSoftAffinity,
+		balanceDatastoreSpaceUsage,
+		balanceDatastoreIOLoad,
+		balanceDatastoreIOPSReservation,
+		datastoreMaint,
+		virtualDiskJointAffin,
+		virtualDiskAntiAffin,
+		datastoreSpaceOutage,
+		storagePlacement,
+		iolbDisabledInternal,
+		xvmotionPlacement,
+		networkBandwidthReservation,
+		hostInDegradation,
+		hostExitDegradation,
+		maxVmsConstraint,
+		ftConstraints
+	}
+}

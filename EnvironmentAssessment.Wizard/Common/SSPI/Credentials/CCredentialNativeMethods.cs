@@ -2,7 +2,7 @@
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI.Credentials
+namespace EnvironmentAssessment.Common.Sspi.Credentials
 {
     internal static class CCredentialNativeMethods
     {

@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI
+namespace EnvironmentAssessment.Common.Sspi
 {
     /// <summary>
     /// Stores information about a particular security package.

@@ -4,7 +4,7 @@
 
 using System;
 
-namespace EnvironmentAssessment.Common.LZMA
+namespace EnvironmentAssessment.Common.Lzma
 {
 	struct CBitEncoder : IDisposable
 	{

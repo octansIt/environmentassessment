@@ -1,6 +1,6 @@
 ﻿using System.Runtime.ConstrainedExecution;
 
-namespace EnvironmentAssessment.Common.SSPI.Credentials
+namespace EnvironmentAssessment.Common.Sspi.Credentials
 {
     /// <summary>
     /// Provides a managed handle to an SSPI credential.

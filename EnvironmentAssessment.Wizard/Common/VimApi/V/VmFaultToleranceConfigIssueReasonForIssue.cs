@@ -1,0 +1,34 @@
+namespace EnvironmentAssessment.Common.VimApi
+{
+	public enum VmFaultToleranceConfigIssueReasonForIssue
+	{
+		haNotEnabled,
+		moreThanOneSecondary,
+		recordReplayNotSupported,
+		replayNotSupported,
+		templateVm,
+		multipleVCPU,
+		hostInactive,
+		ftUnsupportedHardware,
+		ftUnsupportedProduct,
+		missingVMotionNic,
+		missingFTLoggingNic,
+		thinDisk,
+		verifySSLCertificateFlagNotSet,
+		hasSnapshots,
+		noConfig,
+		ftSecondaryVm,
+		hasLocalDisk,
+		esxAgentVm,
+		video3dEnabled,
+		hasUnsupportedDisk,
+		insufficientBandwidth,
+		hasNestedHVConfiguration,
+		hasVFlashConfiguration,
+		unsupportedProduct,
+		cpuHvUnsupported,
+		cpuHwmmuUnsupported,
+		cpuHvDisabled,
+		hasEFIFirmware
+	}
+}

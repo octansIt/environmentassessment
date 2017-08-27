@@ -1,12 +1,24 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using System.Windows.Data;
 
 namespace EnvironmentAssessment.Common
 {
+    public static class CDataUnitType
+    {
+        public const int Byte = 0;
+        public const int KiB = 1;
+        public const int MiB = 2;
+        public const int GiB = 3;
+        public const int TiB = 4;
+        public const int PiB = 5;
+    }
+
     public static class CFunctions
     {
         public const int DateFormatNumeric = 0;
@@ -39,6 +51,8 @@ namespace EnvironmentAssessment.Common
             string strHour = (100 + dt.Hour).ToString().Substring(1, 2);
             string strMinute = (100 + dt.Minute).ToString().Substring(1, 2);
             string strSecond = (100 + dt.Second).ToString().Substring(1, 2);
+            string strTimeOfDay = dt.TimeOfDay.ToString();
+            //string strTicks = (10000000 + dt.Ticks).ToString().Substring(1, 7);
 
             if (format == DateFormatNumeric)
             {
@@ -46,13 +60,23 @@ namespace EnvironmentAssessment.Common
             }
             else if (format == DateFormatLogging)
             {
-                result = strYear + "." + strMonth + "." + strDay + " " + strHour + ":" + strMinute + ":" + strSecond;
+                result = strYear + "." + strMonth + "." + strDay + " " + strTimeOfDay;
             }
             else if (format == DateFormatText)
             {
                 result = strYear + "-" + strMonth + "-" + strDay + " at " + strHour + ":" + strMinute + ":" + strSecond;
             }
 
+            return result;
+        }
+
+        internal static long ConvertDataUnit(long? data, int srctype, int trgtype)
+        {
+            long result = 0;
+            if (data == null) { return result; }
+            double srcdata = (double)data * Math.Pow(1024, srctype);
+            double trgdata = srcdata / Math.Pow(1024, trgtype);
+            result = (Int64)Math.Round(trgdata,MidpointRounding.AwayFromZero);
             return result;
         }
 
@@ -63,12 +87,67 @@ namespace EnvironmentAssessment.Common
 
         public static string StringReplace(params string[] list)
         {
-            string source = list[0];
+            string result = list[0];
             for (int i = 1; i < list.Count(); i++)
             {
-                source = source.Replace("{" + (i - 1) + "}", list[i]);
+                result = result.Replace("{" + (i - 1) + "}", list[i]);
             }
-            return source;
+            return result;
+        }
+
+        public static string EscapeJson(string s)
+        {
+            if (s != null) {
+                StringBuilder result = new StringBuilder();
+                char[] chars = s.ToCharArray();
+                string r;
+                foreach (char c in chars)
+                {
+                    switch (c)
+                    {
+                        case '"':
+                            r = "\\\"";
+                            break;
+                        case '\\':
+                            r = "\\\\";
+                            break;
+                        case '\b':
+                            r = "\\\b";
+                            break;
+                        case '\f':
+                            r = "\\\f";
+                            break;
+                        case '\n':
+                            r = "\\\n";
+                            break;
+                        case '\r':
+                            r = "\\\r";
+                            break;
+                        case '\t':
+                            r = "\\\t";
+                            break;
+                        default:
+                            if (char.IsControl(c)) { r = "\\u" + ((int)c).ToString("x4"); }
+                            else { r = "" + c; }
+                            break;
+                    }
+                    result.Append(r);
+                }
+                return result.ToString();
+            }
+            else { return ""; }
+        }
+
+        public static string StringJoin(string suffix = ";", List<string> list = null)
+        {
+            string result = "";
+            if (list != null) { result = String.Join(suffix, list); }
+            return result;
+        }
+
+        public static string ToStringNz(this object value)
+        {
+            return (value ?? string.Empty).ToString();
         }
 
         public static void EnableCollectionSynchronization(IEnumerable collection, object lockObject)

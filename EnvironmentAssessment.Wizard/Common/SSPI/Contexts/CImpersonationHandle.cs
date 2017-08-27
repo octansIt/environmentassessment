@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace EnvironmentAssessment.Common.SSPI.Contexts
+namespace EnvironmentAssessment.Common.Sspi.Contexts
 {
     /// <summary>
     /// Represents impersonation performed on a server on behalf of a client. 

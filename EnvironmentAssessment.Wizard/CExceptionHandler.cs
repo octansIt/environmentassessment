@@ -43,7 +43,9 @@ namespace EnvironmentAssessment
                     ExceptionDialog dlgException = new ExceptionDialog(appinfo + "\r\n\r\n--- Begin stack trace ---\r\n   " + e);
                     dlgException.ShowDialog();
             }));
-            Environment.Exit(1);
+            if (Core._AllowErrorReporting) { /* do nothing yet */ }
+            try { Environment.Exit(1); }
+            catch { /* do nothing */ }
         }
 
         public class Exceptions

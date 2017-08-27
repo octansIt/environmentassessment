@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Reflection;
 
-namespace EnvironmentAssessment.Common.SSPI
+namespace EnvironmentAssessment.Common.Sspi
 {
     [AttributeUsage( AttributeTargets.Field )]
     public class CEnumStringAttribute : Attribute

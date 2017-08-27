@@ -5,10 +5,15 @@ using System.Net;
 
 namespace EnvironmentAssessment.Common.Inventory
 {
-    public class CSite : CGroup
+    public class CSite : IDiscoveredObject
     {
 
         public List<String> Subnets = new List<String> { };
+
+        public string Location { get; private set; }
+        public string Path { get; private set; }
+        public string Description { get; private set; }
+        public string Name { get; private set; }
 
         public CSite(string name, string adspath, string location, string description)
         {
@@ -18,13 +23,9 @@ namespace EnvironmentAssessment.Common.Inventory
             Description = description;
         }
 
-        internal static string ToStringNz(CSite s)
+        public override string ToString()
         {
-            if (s != null)
-            {
-                return s.Name;
-            }
-            return "";
+            return this.Name;
         }
 
         public static CSite Resolve(IPAddress IPAddr, List<CSite> SiteList)

@@ -25,6 +25,7 @@ namespace EnvironmentAssessment.Controls
         TextBox tbServiceName,tbUsername;
         ComboBox cbServiceType;
         PasswordBox pbPassword;
+        bool ServiceTypeManuallySelected = false;
 
         public IntPtr Handle
         {
@@ -74,7 +75,8 @@ namespace EnvironmentAssessment.Controls
             tbServiceName.Style = (Style)FindResource("WizardTextBoxStyle");
             Label lblServiceName = new Label { Content = "DNS name or IP address:", Target=tbServiceName };
             cbServiceType = new ComboBox {};
-            cbServiceType.ItemsSource = COptions.DiscoverServers;
+            cbServiceType.ItemsSource = COptions.DiscoverServers.OrderBy(o => o.ToString()).ToList();
+            cbServiceType.GotFocus += CbServiceType_GotFocus;
             Label lblServiceType = new Label { Content = "Server type:", Target=cbServiceType};
             tbUsername = new TextBox {};
             tbUsername.TextChanged += tbUsername_TextChanged;
@@ -123,6 +125,11 @@ namespace EnvironmentAssessment.Controls
 
         }
 
+        private void CbServiceType_GotFocus(object sender, RoutedEventArgs e)
+        {
+            ServiceTypeManuallySelected = true;
+        }
+
         void tbUsername_TextChanged(object sender, TextChangedEventArgs e)
         {
             FormValidate();
@@ -130,6 +137,24 @@ namespace EnvironmentAssessment.Controls
 
         void tbServiceName_TextChanged(object sender, TextChangedEventArgs e)
         {
+          if (!ServiceTypeManuallySelected)
+            {
+                if (tbServiceName.Text.Contains("hv"))
+                {
+                    string t = new CServiceType(CServiceType.HYVServer).ToString();
+                    if (cbServiceType.Text != t) { cbServiceType.Text = t; }
+                }
+                else if (tbServiceName.Text.Contains("esx"))
+                {
+                    string t = new CServiceType(CServiceType.ESXServer).ToString();
+                    if (cbServiceType.Text != t) { cbServiceType.Text = t; }
+                }
+                else if (tbServiceName.Text.Contains("vc"))
+                {
+                    string t = new CServiceType(CServiceType.VCenterServer).ToString();
+                    if (cbServiceType.Text != t) { cbServiceType.Text = t; }
+                }
+            }
             FormValidate();
         }
         
@@ -200,7 +225,7 @@ namespace EnvironmentAssessment.Controls
                         if (ObjectValidates(ModifiedObject) && unique)
                         {
                             server.Name = tbServiceName.Text.Trim();
-                            server.IP = ModifiedObject.IP;
+                            //server.IP = ModifiedObject.IP; // should self-resolve
                             server.Type = new CServiceType(cbServiceType.Text);
                             server.UserName = ModifiedObject.UserName;
                             server.UserPassword = ModifiedObject.UserPassword;

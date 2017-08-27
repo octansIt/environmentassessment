@@ -2,7 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Net;
-using EnvironmentAssessment.Common.VISoap;
+using EnvironmentAssessment.Common.VimApi;
 
 namespace EnvironmentAssessment.Common.Inventory
 {
@@ -10,7 +10,7 @@ namespace EnvironmentAssessment.Common.Inventory
     {
         private int _type;
 
-        private static string[] ServiceTypes = { "VMware vCenter", "VMware ESX", "Microsoft Hyper-V", "KVM", "Microsoft SCVMM", "Microsoft SCOM", "Veeam Backup & Replication", "Veeam ONE", "Azure Account", "AWS Account", "GCE Account", "Physical Server", "Physical Workstation", "Domain Controller" };
+        private static string[] Values = { "VMware vCenter", "VMware ESX", "Microsoft Hyper-V", "KVM", "Microsoft SCVMM", "Microsoft SCOM", "Veeam Backup & Replication", "Veeam ONE", "Azure Account", "AWS Account", "GCE Account", "Physical Server", "Physical Workstation", "Domain Controller" };
 
         public const int VCenterServer = 0;
         public const int ESXServer = 1;
@@ -29,7 +29,7 @@ namespace EnvironmentAssessment.Common.Inventory
 
         public CServiceType(string s = "")
         {
-            _type = Array.IndexOf(ServiceTypes, s);
+            _type = Array.IndexOf(Values, s);
         }
         public CServiceType(int t = -1)
         {
@@ -38,12 +38,12 @@ namespace EnvironmentAssessment.Common.Inventory
 
         public void Dispose()
         {
-            ServiceTypes = null;
+            Values = null;
         }
 
         public override string ToString()
         {
-            return ServiceTypes[_type];
+            return Values[_type];
         }
 
         public static implicit operator int(CServiceType x)
@@ -55,24 +55,37 @@ namespace EnvironmentAssessment.Common.Inventory
 
     public class CService : IDiscoveredObject
       {
-            //public bool IsChanged = false;
-            //public DateTime CurrentQueryTime;
-            //public string CurrentObjectHash;
-            //public DateTime LastQueryTime;
-            //public string LastObjectHash;
-
             public IPAddress IP { get; set; }
             //private IPAddress[] ServerIPs; // zzz - for future in case that ip address listed is not the one we should try
-            public string Name { get; set; }
+
+            internal string _name = "";
+            public string Name {
+                get {
+                    return _name;
+                }
+                set {
+                    IPHostEntry hostInfo = null;
+                    try
+                    {
+                        if (value.Length != 0)
+                        {
+                            hostInfo = Dns.Resolve(value.Trim()); // zzz - using this on purpose. don't want IPv6 support right now, as it would mess up site discovery logic
+                            _name = hostInfo.HostName.ToString();
+                            IP = hostInfo.AddressList[0];
+                        }
+                    }
+                    catch { /* do nothing - should end up with old name and IP address */ }
+                }
+            }
+
             public string UserName { get; set; }
             public string UserPassword;
             //public static string Parent;
             public CServiceType Type { get; set; }
             public string Version { get; internal set; }
 
-        public CSession Session = null;
-            public int ID;
-            public string UID;
+            public CSession Session = null;
+            public string Id;
             
             public CService(string name, int type, string user = "", string password = "")
             {
@@ -83,20 +96,8 @@ namespace EnvironmentAssessment.Common.Inventory
             private void _CServer(string name, CServiceType type, string user = "", string password = "")
             {
                 // initialize values
-
-                // resolve ip address
-                IPHostEntry hostInfo = null;
-                try
-                {
-                    if (name.Length != 0)
-                    {
-                        hostInfo = Dns.Resolve(name.Trim()); // zzz - using this on purpose. don't want IPv6 support right now, as it would mess up site discovery logic
-                        Name = hostInfo.HostName.ToString();
-                        IP = hostInfo.AddressList[0];
-                    }
-                }
-                catch { Name = ""; IP = null; }
-
+                Name = name; // ip resolution handled by get set function
+                Id = CFunctions.GenerateUID();
                 if (user == "") { UserName = Environment.UserDomainName + "\\" + Environment.UserName; }
                 else { UserName = user; }
 
@@ -109,21 +110,6 @@ namespace EnvironmentAssessment.Common.Inventory
                 if (Session != null) { Session.Dispose(); }
                 Session = new CSession(this);
             }
-
-            /* public CSession Connect() // return CSession
-            {
-                if (Session.Connected == false)
-                {
-                    if (IP != null) { Session.Connect(); }
-                }
-                return Session;
-            }
-
-            public void Disconnect()
-            {
-                try { Session.Disconnect(); }
-                catch { } // no error handling as of now
-            } */
 
         public new void Dispose()
         {
@@ -143,47 +129,5 @@ namespace EnvironmentAssessment.Common.Inventory
 
     }
 
-    public class CServiceConfig : IDisposable
-        {
-            internal CSite Site;
-            internal string Name;
-            internal IPAddress IP;
-            // --
-            internal string OS;
-            internal int Version;
-            internal int CPUSockets;
-            internal int CPUCores;
-            internal long RAM;
-
-            internal string Cluster;
-            internal string Datacenter;
-            internal string _ToolsVersion;
-            internal string _HardwareVersion;
-            
-            internal List<CStorageConfig> Disks;
-            internal long[] DiskUsageReported;
-            internal long[] DiskUsageActual;
-            public List<string> Children;
-            public List<string> Owner;
-
-        internal CDiscoveredState State { get; set; }
-
-        public void Dispose()
-        {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
-        protected virtual void Dispose(bool disposing)
-        {
-            if (disposing) //free managed resources if any
-            {
-                if (Site != null) { Site.Dispose(); }
-            }
-            // free native resources if there are any.  
-            IP = null;
-            Disks.Clear();
-            Disks = null;
-        }
-
-        }
+    
     }

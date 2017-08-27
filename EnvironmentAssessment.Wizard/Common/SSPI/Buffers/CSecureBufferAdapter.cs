@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI.Buffers
+namespace EnvironmentAssessment.Common.Sspi.Buffers
 {
     /// <summary>
     /// Prepares SecureBuffers for providing them to native API calls.

@@ -18,7 +18,7 @@ namespace EnvironmentAssessment.Collector
     {
         private int _type;
 
-        private static string[] DiscoverTypes = { "Discovery Without Portscan", "Discovery With Portscan" };
+        private static string[] Values = { "Discovery Without Portscan", "Discovery With Portscan" };
 
         public const int WithoutPortScan = 0; // queries objects without checking ports where possible
         public const int WithPortScan = 1; // queries objects and check ports
@@ -30,12 +30,12 @@ namespace EnvironmentAssessment.Collector
 
         public void Dispose()
         {
-            DiscoverTypes = null;
+            Values = null;
         }
 
         public override string ToString()
         {
-            return DiscoverTypes[_type];
+            return Values[_type];
         }
 
         public static implicit operator int(CDiscoveryType x)
@@ -329,9 +329,9 @@ namespace EnvironmentAssessment.Collector
         {
             using (TcpClient client = new TcpClient())
             {
-                Log.Write(CFunctions.StringReplace("Checking " + protocol.ToString() + "://{0}:{1} for service presence ({2}).", CNetwork.IPToStringNz(service.IP), port.ToString(), stringsearch));
+                Log.Write(CFunctions.StringReplace("Checking " + protocol.ToString() + "://{0}:{1} for service presence ({2}).", service.IP.ToStringNz(), port.ToString(), stringsearch));
                 var result = client.BeginConnect(service.IP, port, null, null);
-                var success = result.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(COptions.Connection_Timeout));
+                var success = result.AsyncWaitHandle.WaitOne(TimeSpan.FromMilliseconds(COptions.Connection_Timeout),true);
                 bool found = false;
                 if (success)
                 {
@@ -343,9 +343,10 @@ namespace EnvironmentAssessment.Collector
                             req.Method = "GET";
                             using (StreamReader reader = new StreamReader(req.GetResponse().GetResponseStream()))
                             {
-                                while (!reader.EndOfStream && !found)
+                                if (stringsearch == null) { found = true; } // do not search if there is nothing to look for
+                                while (!reader.EndOfStream && !found) // otherwise search
                                 {
-                                    string source = reader.ReadLine();
+                                    string source = reader.ReadLine() + String.Empty;
                                     if (source.ToLower().Contains(stringsearch.ToLower()))
                                     {
                                         found = true;
@@ -361,8 +362,8 @@ namespace EnvironmentAssessment.Collector
                     {
                         lock (_ServerPortScanLock)
                         {
-                            Log.Write("Service present (" + CNetwork.ProtocolToStringNz(protocol) + "): " + service.Name + " (" + service.Type + "); " + CNetwork.IPToStringNz(service.IP));
-                            _ServerPortScanResults.Add(service.Name + ";" + service.Type.ToString() + ";" + CNetwork.IPToStringNz(service.IP) + ";" + port);
+                            Log.Write("Service present (" + protocol.ToStringNz() + "): " + service.Name + " (" + service.Type + "); " + service.IP.ToStringNz());
+                            _ServerPortScanResults.Add(service.Name + ";" + service.Type.ToString() + ";" + service.IP.ToStringNz() + ";" + port);
                         }
                     }
                 }

@@ -38,15 +38,15 @@ namespace EnvironmentAssessment.Common
             }
         }
 
-        #if DEBUG
+#if DEBUG
         public const int Verbosity = Log.Verbosity.Everything;
-        #else
+#else
         public const int Verbosity = Log.Verbosity.Verbose;
-        #endif
-        
+#endif
+
         public const int Thread_Max_Total = 128;
         public const int Thread_Wait = 500; // phase out, use event handling instead
-        
+
         public const int Thread_Max_VI_Per_Instance = 16;
         public const int VI_Thread_Wait = 100;
         public const int VI_Timeout = 100000;
@@ -64,13 +64,13 @@ namespace EnvironmentAssessment.Common
         public const int Session_Thread_Wait = 250; // phase out, use event handling instead
 
         public const int Display_Thread_Wait = 500; // wait time between GUI display updates for progress counters
-    
-        public const int Connection_Timeout = 1000;
+
+        public const int Connection_Timeout = 5000;
 
         public const int Preciseness = Precision.Medium; // affects if we scan for actual thin/thick disk sizes
 
         public const int DiscoveryType = Collector.CDiscoveryType.WithPortScan;
-        public static List<CServiceType> DiscoverServers = new List<CServiceType> { new CServiceType(CServiceType.VCenterServer), new CServiceType(CServiceType.ESXServer) };
-        
+        public static List<CServiceType> DiscoverServers = new List<CServiceType> { new CServiceType(CServiceType.VCenterServer), new CServiceType(CServiceType.ESXServer), new CServiceType(CServiceType.HYVServer) }; //new CServiceType(CServiceType.VBRServer) };
+
     }
 }

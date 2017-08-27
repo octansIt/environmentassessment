@@ -2,7 +2,7 @@
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI
+namespace EnvironmentAssessment.Common.Sspi
 {
     /// <summary>
     /// Represents the raw structure for any handle created for the SSPI API, for example, credential 

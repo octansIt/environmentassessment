@@ -43,7 +43,7 @@ namespace EnvironmentAssessment.Collector
         public List<CTaskInfo> SessionInfo = new List<CTaskInfo> { };
         private bool Started = false;
 
-        internal void RunStatisticsCollector(List<IDiscoveredObject> DiscoveredSites, List<IDiscoveredObject> DiscoveredServers, List<CQuery.Types> queries, CCollectionSchedule schedule)
+        internal void Collect(List<IDiscoveredObject> DiscoveredSites, List<IDiscoveredObject> DiscoveredServers, List<CQuery.Types> queries, CCollectionSchedule schedule)
         {
 
             string uid;
@@ -77,9 +77,20 @@ namespace EnvironmentAssessment.Collector
 
                     foreach (CQuery.Types type in queries)
                     {
-                        CQuery query = new CQuery(ref ServerList[i].Session, type, SiteList, uid);
-                        SessionInfo.Add(query.Progress);
-                        ServerList[i].Session.AddQuery(query);
+                        bool QueryApplicable = false;
+                        if (((type == CQuery.Types.Components) || (type == CQuery.Types.Events) || (type == CQuery.Types.Logs)) && (ServerList[i].Type == CServiceType.VBRServer)) {
+                            QueryApplicable = true;
+                        }
+                        else if (((type == CQuery.Types.Hosts) || (type == CQuery.Types.Datastores) || (type == CQuery.Types.VMs)) && ((ServerList[i].Type == CServiceType.VCenterServer) || (ServerList[i].Type == CServiceType.ESXServer) || (ServerList[i].Type == CServiceType.HYVServer))) {
+                            QueryApplicable = true;
+                        }
+
+                        if (QueryApplicable)
+                        {
+                            CQuery query = new CQuery(ref ServerList[i].Session, type, SiteList, uid);
+                            SessionInfo.Add(query.Progress);
+                            ServerList[i].Session.AddQuery(query);
+                        }
                     }
 
                     // Log.Write(" : RunStatisticsCollector (registering session " + ServerList[i].Session.Server.Name + ")", Log.Verbosity.Everything);

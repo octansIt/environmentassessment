@@ -1,4 +1,4 @@
-﻿namespace EnvironmentAssessment.Common.SSPI
+﻿namespace EnvironmentAssessment.Common.Sspi
 {
     /*
     // From winerror.h 

@@ -13,8 +13,8 @@ WScript.Echo "[Embedded Resources] Updating included Assembly resources to match
 WScript.Echo "[Embedded Resources] Cleaning up resource temp directory."
 Run "cmd /c ""del """ + strProject + "\Includes\resources.tar"" /q"
 Run "cmd /c ""del """ + strProject + "\Includes\resources.lzma"" /q"
-Run "cmd /c ""del """ + strProject + "\Includes\resources\*.svg"""
-Run "cmd /c ""del """ + strProject + "\Includes\resources\*.js"""
+'Run "cmd /c ""del """ + strProject + "\Includes\resources\*.svg"""
+'Run "cmd /c ""del """ + strProject + "\Includes\resources\*.js"""
 
 WScript.Echo "[Embedded Resources] Updating LZMA TAR file to included latest resources."
 

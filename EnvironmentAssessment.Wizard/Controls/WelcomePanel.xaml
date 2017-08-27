@@ -17,7 +17,7 @@
                     <TextBlock Name="tbkTitle" UseLayoutRounding="True" FontSize="36" FontFamily="Segoe UI Light" Width="300" TextWrapping="Wrap" LineHeight="33" LineStackingStrategy ="BlockLineHeight" Foreground="{DynamicResource DarkGray}" Margin="30,-100,0,0">Analyze your server environment</TextBlock>
                 </Label>
                 <Label VerticalAlignment="Center">
-                    <TextBlock Name="tbkSubTitle" UseLayoutRounding="True" FontSize="14" Foreground="{DynamicResource MediumGray}" TextWrapping="Wrap" Margin="30,-30,10,0">Collects data from vSphere and Hyper-V.</TextBlock>
+                    <TextBlock Name="tbkSubTitle" UseLayoutRounding="True" FontSize="14" Foreground="{DynamicResource MediumGray}" TextWrapping="Wrap" Margin="30,-30,10,0" Width="400">Collects data from vSphere and Hyper-V.</TextBlock>
                 </Label>
                 <Label VerticalAlignment="Bottom">
                     <TextBlock Name="tbkTerms" UseLayoutRounding="True" FontSize="10" Foreground="{DynamicResource MediumGray}" TextWrapping="Wrap" Margin="30,0,10,10"></TextBlock>

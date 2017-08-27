@@ -1,4 +1,4 @@
-﻿namespace EnvironmentAssessment.Common.SSPI.Contexts
+﻿namespace EnvironmentAssessment.Common.Sspi.Contexts
 {
     /// <summary>
     /// Defines the types of queries that can be performed with QueryContextAttribute.
@@ -16,7 +16,7 @@
         Sizes = 0,
 
         /// <summary>
-        /// Queries the context for the name of the user assocated with a security context.
+        /// Queries the context for the name of the user associated with a security context.
         /// </summary>
         /// <remarks>
         /// Results for a query of this type are stored in a Win32 SecPkgContext_Name structure.

@@ -2,7 +2,7 @@
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI
+namespace EnvironmentAssessment.Common.Sspi
 {
     internal static class CNativeMethods
     {

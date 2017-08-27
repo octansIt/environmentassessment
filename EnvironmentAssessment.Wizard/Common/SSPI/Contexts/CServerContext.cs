@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
-using EnvironmentAssessment.Common.SSPI.Buffers;
-using EnvironmentAssessment.Common.SSPI.Credentials;
+using EnvironmentAssessment.Common.Sspi.Buffers;
+using EnvironmentAssessment.Common.Sspi.Credentials;
 
-namespace EnvironmentAssessment.Common.SSPI.Contexts
+namespace EnvironmentAssessment.Common.Sspi.Contexts
 {
     /// <summary>
     /// Represents a security context used in a server role.

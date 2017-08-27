@@ -1,4 +1,4 @@
-﻿namespace EnvironmentAssessment.Common.SSPI.Credentials
+﻿namespace EnvironmentAssessment.Common.Sspi.Credentials
 {
     /// <summary>
     /// Represents the credentials of the user running the current process, for use as an SSPI client.

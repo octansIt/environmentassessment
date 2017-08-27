@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace EnvironmentAssessment.Common.SSPI.Contexts
+namespace EnvironmentAssessment.Common.Sspi.Contexts
 {
     /// <summary>
     /// Defines options for creating a security context via win32 InitializeSecurityContext 

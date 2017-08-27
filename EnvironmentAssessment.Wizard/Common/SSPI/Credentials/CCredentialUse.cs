@@ -1,4 +1,4 @@
-﻿namespace EnvironmentAssessment.Common.SSPI.Credentials
+﻿namespace EnvironmentAssessment.Common.Sspi.Credentials
 {
     /// <summary>
     /// Indicates the manner in which a credential will be used for SSPI authentication.

@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using EnvironmentAssessment.Common.SSPI.Buffers;
-using EnvironmentAssessment.Common.SSPI.Credentials;
+using EnvironmentAssessment.Common.Sspi.Buffers;
+using EnvironmentAssessment.Common.Sspi.Credentials;
 
-namespace EnvironmentAssessment.Common.SSPI.Contexts
+namespace EnvironmentAssessment.Common.Sspi.Contexts
 {
     /// <summary>
     /// Represents a security context and provides common functionality required for all security 

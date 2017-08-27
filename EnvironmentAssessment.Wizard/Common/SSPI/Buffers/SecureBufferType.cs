@@ -1,4 +1,4 @@
-﻿namespace EnvironmentAssessment.Common.SSPI.Buffers
+﻿namespace EnvironmentAssessment.Common.Sspi.Buffers
 {
     /// <summary>
     /// Describes the type and purpose of a secure buffer passed to the native API.

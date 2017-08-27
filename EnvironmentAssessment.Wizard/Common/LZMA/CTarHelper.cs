@@ -28,7 +28,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
-namespace EnvironmentAssessment.Common.LZMA
+namespace EnvironmentAssessment.Common.Lzma
 {
     static class CTarHelper
     {

@@ -4,9 +4,9 @@ using System.Linq;
 
 namespace EnvironmentAssessment.Collector
 {
-    using Common.VISoap;
-    using Common.HVAPI;
-    using Common.VBRAPI;
+    using Common.VimApi;
+    using Common.HvApi;
+    using Common.VbrApi;
     using Collector;
     using System.Net;
     using System.Threading;
@@ -140,13 +140,13 @@ namespace EnvironmentAssessment.Collector
                 {
                     string tid = CFunctions.GenerateUID();
                     int id = i; // using local context variable to allow delegation
-                    Log.Write("[Threading] Starting thread (" + tid + ") to run session query " + (i + 1) + "/" + Session.Queries.Count + " (" + Session.Queries[i].ID + ").", Log.Verbosity.Everything);
+                    Log.Write("[Threading] Starting thread (" + tid + ") to run session query " + (i + 1) + "/" + Session.Queries.Count + " (" + Session.Queries[i].Id + ").", Log.Verbosity.Everything);
                     
                     CThread.Types threadtype = new CThread.Types(CThread.Types.Unmanaged);
                     if ((Server.Type == CServiceType.ESXServer) || (Server.Type == CServiceType.VCenterServer)) { threadtype = new CThread.Types(CThread.Types.VMware); }
                     if ((Server.Type == CServiceType.SCVMMServer) || (Server.Type == CServiceType.HYVServer)) { threadtype = new CThread.Types(CThread.Types.HyperV); }
                     
-                    Core.ThreadManager.Add(new CThread() { Type = threadtype, Worker = new Thread(delegate() { DoQuery(id); }), Session = this, ID = tid });
+                    Core.ThreadManager.Add(new CThread() { Type = threadtype, Worker = new Thread(delegate() { DoQuery(id); }), Session = this, Id = tid });
                 }
             }
             do {
@@ -177,6 +177,8 @@ namespace EnvironmentAssessment.Collector
                 if (Session.Queries[id].Type == CQuery.Types.Hosts) { QueryHosts(id); }
                 if (Session.Queries[id].Type == CQuery.Types.Datastores) { QueryDatastores(id); }
                 if (Session.Queries[id].Type == CQuery.Types.VMs) { QueryVMs(id); }
+                if (Session.Queries[id].Type == CQuery.Types.Components) { QueryComponents(id); }
+                if (Session.Queries[id].Type == CQuery.Types.Events) { QueryEvents(id); }
 
                 // rollup results
                 if (Session.Error.Length > 0)
@@ -198,35 +200,53 @@ namespace EnvironmentAssessment.Collector
 
         private void QueryVMs(int queryid)
         {
-            List<CServiceConfig> result = new List<CServiceConfig> { };
+            List<CDiscoveredConfig> result = new List<CDiscoveredConfig> { };
 
-            if ((Server.Type == CServiceType.ESXServer) || (Server.Type == CServiceType.VCenterServer)) { result = ((VimSession)Session).GetVIVMs(queryid); }
-            if ((Server.Type == CServiceType.SCVMMServer) || (Server.Type == CServiceType.HYVServer)) { result = ((HviSession)Session).GetHVVMs(queryid); }
+            if ((Server.Type == CServiceType.VCenterServer) || (Server.Type == CServiceType.ESXServer)) { result = ((VimSession)Session).GetVms(queryid); }
+            if ((Server.Type == CServiceType.SCVMMServer) || (Server.Type == CServiceType.HYVServer)) { result = ((HviSession)Session).GetVms(queryid); }
             
             Session.Queries[queryid].Result = result;
         }
 
         private void QueryHosts(int queryid)
         {
-            List<CServiceConfig> result = new List<CServiceConfig> { };
+            List<CDiscoveredConfig> result = new List<CDiscoveredConfig> { };
 
-            if ((Server.Type == CServiceType.VCenterServer)) { result = ((VimSession)Session).GetVIHosts(queryid); }
-            if ((Server.Type == CServiceType.SCVMMServer)) { result = ((HviSession)Session).GetHVHosts(queryid); }
+            if ((Server.Type == CServiceType.VCenterServer) || (Server.Type == CServiceType.ESXServer)) { result = ((VimSession)Session).GetHosts(queryid); }
+            if ((Server.Type == CServiceType.SCVMMServer) || (Server.Type == CServiceType.HYVServer)) { result = ((HviSession)Session).GetHosts(queryid); }
             
+            Session.Queries[queryid].Result = result;
+        }
+
+        private void QueryComponents(int queryid)
+        {
+            List<CDiscoveredConfig> result = new List<CDiscoveredConfig> { };
+
+            if ((Server.Type == CServiceType.VBRServer)) { result = ((VbrSession)Session).GetComponents(queryid); }
+
+            Session.Queries[queryid].Result = result;
+        }
+
+        private void QueryEvents(int queryid)
+        {
+            List<CDiscoveredConfig> result = new List<CDiscoveredConfig> { };
+
+            if ((Server.Type == CServiceType.VBRServer)) { result = ((VbrSession)Session).GetEvents(queryid); }
+
             Session.Queries[queryid].Result = result;
         }
 
         private void QueryDatastores(int queryid)
         {
-            List<CServiceConfig> result = new List<CServiceConfig> { };
-            List<CStorageConfig> datastores = new List<CStorageConfig> { };
+            List<CDiscoveredConfig> result = new List<CDiscoveredConfig> { };
+            List<CDiscoveredConfig> datastores = new List<CDiscoveredConfig> { };
 
-            if ((Server.Type == CServiceType.VCenterServer)) { datastores = ((VimSession)Session).GetVIDatastores(queryid); }
-            if ((Server.Type == CServiceType.SCVMMServer)) { datastores = ((HviSession)Session).GetHVDatastores(queryid); }
+            if ((Server.Type == CServiceType.VCenterServer) || (Server.Type == CServiceType.ESXServer)) { datastores = ((VimSession)Session).GetDatastores(queryid); }
+            if ((Server.Type == CServiceType.SCVMMServer) || (Server.Type == CServiceType.HYVServer)) { datastores = ((HviSession)Session).GetDatastores(queryid); }
 
             if (datastores != null)
             {
-                result.Add(new CServiceConfig() { Disks = datastores });
+                result.Add(new CDiscoveredConfig() { ChildObjects = datastores });
             }
 
             Session.Queries[queryid].Result = result;

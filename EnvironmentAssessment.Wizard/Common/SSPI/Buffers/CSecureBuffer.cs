@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 
-namespace EnvironmentAssessment.Common.SSPI.Buffers
+namespace EnvironmentAssessment.Common.Sspi.Buffers
 {
     /// <summary>
     /// Represents a native SecureBuffer structure, which is used for communicating
